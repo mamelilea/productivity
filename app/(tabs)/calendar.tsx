@@ -154,7 +154,13 @@ export default function CalendarScreen() {
               day && isSelected(day) ? { backgroundColor: colors.primary } : null,
               day && isToday(day) && !isSelected(day) ? { borderColor: colors.primary, borderWidth: 2 } : null
             ]}
-            onPress={() => day && setSelectedDate(getDateString(day))}
+            onPress={() => {
+              if (day) {
+                const dateStr = getDateString(day);
+                setSelectedDate(dateStr);
+                router.push(`/calendar/${dateStr}`);
+              }
+            }}
             disabled={!day}
           >
             {day && (

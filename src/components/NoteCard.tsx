@@ -20,8 +20,9 @@ export default function NoteCard({ note, onPress }: NoteCardProps) {
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
-  // Get preview text (first 100 chars)
+  // Get preview text (first 100 chars) - censor if private
   const getPreview = () => {
+    if (note.is_private) return '••••••••••••••••••••••••••••••';
     if (!note.content) return 'Tidak ada isi...';
     return note.content.length > 100 
       ? note.content.substring(0, 100) + '...' 
@@ -45,17 +46,22 @@ export default function NoteCard({ note, onPress }: NoteCardProps) {
       )}
       
       <View style={styles.content}>
-        {/* Title */}
-        <Text 
-          style={[styles.title, { color: colors.textPrimary }]}
-          numberOfLines={1}
-        >
-          {note.title}
-        </Text>
+        {/* Title with lock icon for private */}
+        <View style={styles.titleRow}>
+          {note.is_private && (
+            <Ionicons name="lock-closed" size={14} color={colors.textMuted} style={{ marginRight: 6 }} />
+          )}
+          <Text 
+            style={[styles.title, { color: colors.textPrimary, flex: 1 }]}
+            numberOfLines={1}
+          >
+            {note.title}
+          </Text>
+        </View>
         
-        {/* Preview */}
+        {/* Preview - censored if private */}
         <Text 
-          style={[styles.preview, { color: colors.textSecondary }]}
+          style={[styles.preview, { color: note.is_private ? colors.textMuted : colors.textSecondary }]}
           numberOfLines={2}
         >
           {getPreview()}
@@ -109,6 +115,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingLeft: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: 16,

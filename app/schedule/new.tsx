@@ -17,10 +17,10 @@ import {
 import { NAMA_HARI } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
-    KeyboardAvoidingView,
+    Keyboard,
     Platform,
     ScrollView,
     StyleSheet,
@@ -35,8 +35,33 @@ export default function NewScheduleScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
+  const scrollViewRef = useRef<ScrollView>(null);
   
   const { fetchSchedules } = useAppStore();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  
+  // Keyboard listener untuk mengatasi scroll bug
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+  
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
   
   // Form state
   const [title, setTitle] = useState('');
@@ -204,16 +229,13 @@ export default function NewScheduleScreen() {
   const isRecurring = recurrenceType !== 'none';
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={100}
+    <ScrollView 
+      ref={scrollViewRef}
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 50 : 50 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView 
-        style={[styles.container, { backgroundColor: colors.background }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
       {/* Title */}
       <View style={styles.formGroup}>
         <Text style={[styles.label, { color: colors.textPrimary }]}>
@@ -432,6 +454,7 @@ export default function NewScheduleScreen() {
             onChangeText={setNewLinkUrl}
             autoCapitalize="none"
             keyboardType="url"
+            onFocus={scrollToBottom}
           />
           <TextInput
             style={[styles.input, styles.linkInput, { 
@@ -443,6 +466,7 @@ export default function NewScheduleScreen() {
             placeholderTextColor={colors.textMuted}
             value={newLinkLabel}
             onChangeText={setNewLinkLabel}
+            onFocus={scrollToBottom}
           />
           <TouchableOpacity
             style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
@@ -570,7 +594,6 @@ export default function NewScheduleScreen() {
         }}
       />
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 

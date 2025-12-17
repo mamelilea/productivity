@@ -6,33 +6,40 @@ import * as notificationService from '@/src/services/notificationService';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import {
-    ASSIGNMENT_TYPE_OPTIONS,
-    COLORS,
-    DARK_COLORS,
-    PRIORITY_OPTIONS,
-    REMINDER_PRESETS,
-    TASK_TYPE_OPTIONS
+  ASSIGNMENT_TYPE_OPTIONS,
+  COLORS,
+  DARK_COLORS,
+  PRIORITY_OPTIONS,
+  REMINDER_PRESETS,
+  TASK_TYPE_OPTIONS
 } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Keyboard,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 export default function NewTaskScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
   
   const { categories, refreshTaskData, fetchCategories } = useAppStore();
   const taskCategories = categories.filter(c => c.type === 'TASK');
@@ -62,9 +69,27 @@ export default function NewTaskScreen() {
   const [reminderOffset, setReminderOffset] = useState(1440); // 1 day default
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   useEffect(() => {
     fetchCategories();
+  }, []);
+  
+  // Keyboard listener untuk Android
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, []);
   
   const handleSubmit = async () => {
@@ -172,16 +197,13 @@ export default function NewTaskScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={100}
+    <ScrollView 
+      ref={scrollViewRef}
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 50 : 50 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView 
-        style={[styles.container, { backgroundColor: colors.background }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
         {/* Title */}
         <View style={styles.formGroup}>
           <Text style={[styles.label, { color: colors.textPrimary }]}>
@@ -417,6 +439,7 @@ export default function NewTaskScreen() {
               onChangeText={setNewLinkUrl}
               autoCapitalize="none"
               keyboardType="url"
+              onFocus={scrollToBottom}
             />
             <TextInput
               style={[styles.input, { 
@@ -429,6 +452,7 @@ export default function NewTaskScreen() {
               placeholderTextColor={colors.textMuted}
               value={newLinkLabel}
               onChangeText={setNewLinkLabel}
+              onFocus={scrollToBottom}
             />
             <TouchableOpacity
               style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
@@ -459,8 +483,7 @@ export default function NewTaskScreen() {
         </TouchableOpacity>
         
         <View style={{ height: 50 }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </ScrollView>
   );
 }
 

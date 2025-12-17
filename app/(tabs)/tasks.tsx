@@ -29,9 +29,16 @@ export default function TasksScreen() {
   const { tasks, isLoading, fetchTasks, refreshTaskData } = useAppStore();
   const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('ALL');
+  const [filterCustomType, setFilterCustomType] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL');
   const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  
+  // Get unique custom types from tasks
+  const customTypes = [...new Set(tasks
+    .filter(t => t.type === 'CUSTOM' && t.custom_type)
+    .map(t => t.custom_type as string)
+  )];
   
   useEffect(() => {
     fetchTasks();
@@ -66,7 +73,12 @@ export default function TasksScreen() {
   // Filter and sort tasks
   const filteredTasks = tasks
     .filter(task => {
-      if (filterType !== 'ALL' && task.type !== filterType) return false;
+      // Type filter
+      if (filterType !== 'ALL') {
+        if (task.type !== filterType) return false;
+        // If filtering CUSTOM and specific custom type selected
+        if (filterType === 'CUSTOM' && filterCustomType && task.custom_type !== filterCustomType) return false;
+      }
       if (filterStatus !== 'ALL' && task.status !== filterStatus) return false;
       if (filterCategoryId !== null && task.category_id !== filterCategoryId) return false;
       return true;
@@ -93,12 +105,13 @@ export default function TasksScreen() {
     label: string, 
     value: string, 
     currentValue: string, 
-    onPress: () => void
+    onPress: () => void,
+    uniqueKey?: string
   ) => {
     const isActive = value === currentValue;
     return (
       <TouchableOpacity
-        key={value}
+        key={uniqueKey || value}
         style={[
           styles.filterChip,
           { 
@@ -158,11 +171,24 @@ export default function TasksScreen() {
         {/* Type Filter */}
         <View style={styles.filterRow}>
           <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Tipe:</Text>
-          <View style={styles.filterChips}>
-            {renderFilterChip('Semua', 'ALL', filterType, () => setFilterType('ALL'))}
-            {renderFilterChip('📚 Kuliah', 'KULIAH', filterType, () => setFilterType('KULIAH'))}
-            {renderFilterChip('📋 Non-Kuliah', 'NON_KULIAH', filterType, () => setFilterType('NON_KULIAH'))}
-          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterChips}
+          >
+            {renderFilterChip('Semua', 'ALL', filterType, () => { setFilterType('ALL'); setFilterCustomType(null); })}
+            {renderFilterChip('📚 Kuliah', 'KULIAH', filterType, () => { setFilterType('KULIAH'); setFilterCustomType(null); })}
+            {renderFilterChip('📋 Non-Kuliah', 'NON_KULIAH', filterType, () => { setFilterType('NON_KULIAH'); setFilterCustomType(null); })}
+            {customTypes.map(ct => 
+              renderFilterChip(
+                `🏷️ ${ct}`, 
+                'CUSTOM', 
+                filterType === 'CUSTOM' && filterCustomType === ct ? 'CUSTOM' : '', 
+                () => { setFilterType('CUSTOM'); setFilterCustomType(ct); },
+                `CUSTOM_${ct}`
+              )
+            )}
+          </ScrollView>
         </View>
         
         {/* Status Filter */}

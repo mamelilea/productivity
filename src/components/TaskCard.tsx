@@ -99,7 +99,7 @@ export default function TaskCard({
           {/* Type badge */}
           <View style={[styles.badge, { backgroundColor: colors.surfaceVariant }]}>
             <Text style={[styles.badgeText, { color: colors.textSecondary }]}>
-              {task.type === 'KULIAH' ? '📚 Kuliah' : '📋 Non-Kuliah'}
+              {task.type === 'KULIAH' ? '📚 Kuliah' : task.type === 'CUSTOM' ? `🏷️ ${task.custom_type || 'Custom'}` : '📋 Non-Kuliah'}
             </Text>
           </View>
           

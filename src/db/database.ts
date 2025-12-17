@@ -59,6 +59,102 @@ export const initializeDatabase = async (): Promise<void> => {
 
   const db = await getDatabase();
 
+  // Migration: Recreate tasks table with CUSTOM type support
+  try {
+    // Check if table exists and if it has CUSTOM in type constraint
+    const sqlResult = await db.getAllAsync(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+    );
+
+    if (sqlResult.length > 0) {
+      const createSql = (sqlResult[0] as any).sql || '';
+      // Check if CUSTOM is in the type constraint
+      const hasCustomConstraint = createSql.includes("'CUSTOM'");
+
+      if (!hasCustomConstraint) {
+        console.log('Migration: Recreating tasks table with CUSTOM type support...');
+
+        await db.execAsync(`
+          -- Create new table with correct schema
+          CREATE TABLE IF NOT EXISTS tasks_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            category_id INTEGER,
+            type TEXT NOT NULL CHECK(type IN ('KULIAH', 'NON_KULIAH', 'CUSTOM')),
+            custom_type TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'TODO' CHECK(status IN ('TODO', 'PROGRESS', 'DONE')),
+            priority TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(priority IN ('LOW', 'MEDIUM', 'HIGH')),
+            deadline TEXT,
+            is_today INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            completed_at TEXT,
+            FOREIGN KEY (category_id) REFERENCES categories(id)
+          );
+
+          -- Copy data from old table (only columns that exist)
+          INSERT INTO tasks_new (id, title, description, category_id, type, status, priority, deadline, is_today, created_at, completed_at)
+          SELECT id, title, description, category_id, type, status, priority, deadline, is_today, created_at, completed_at FROM tasks;
+
+          -- Drop old table
+          DROP TABLE tasks;
+
+          -- Rename new table
+          ALTER TABLE tasks_new RENAME TO tasks;
+        `);
+
+        console.log('Migration: Tasks table recreated successfully');
+      }
+    }
+  } catch (e) {
+    console.log('Migration check skipped:', e);
+    // Table doesn't exist yet, will be created below
+  }
+
+  // Migration: Add is_private column to notes table if it doesn't exist
+  try {
+    const notesTableInfo = await db.getAllAsync("PRAGMA table_info(notes)");
+    if ((notesTableInfo as any[]).length > 0) {
+      const hasIsPrivate = (notesTableInfo as any[]).some(col => col.name === 'is_private');
+      if (!hasIsPrivate) {
+        await db.execAsync("ALTER TABLE notes ADD COLUMN is_private INTEGER DEFAULT 0");
+        console.log('Migration: Added is_private column to notes table');
+      }
+    }
+  } catch (e) {
+    console.log('Notes migration check skipped:', e);
+  }
+
+  // Migration: Add missing columns to schedules table
+  try {
+    const schedulesTableInfo = await db.getAllAsync("PRAGMA table_info(schedules)");
+    if ((schedulesTableInfo as any[]).length > 0) {
+      const columns = (schedulesTableInfo as any[]).map(col => col.name);
+
+      // Add all potentially missing columns
+      const missingColumns = [
+        { name: 'custom_type', sql: "ALTER TABLE schedules ADD COLUMN custom_type TEXT DEFAULT NULL" },
+        { name: 'description', sql: "ALTER TABLE schedules ADD COLUMN description TEXT DEFAULT ''" },
+        { name: 'is_recurring', sql: "ALTER TABLE schedules ADD COLUMN is_recurring INTEGER DEFAULT 0" },
+        { name: 'recurrence_type', sql: "ALTER TABLE schedules ADD COLUMN recurrence_type TEXT DEFAULT 'none'" },
+        { name: 'recurrence_interval', sql: "ALTER TABLE schedules ADD COLUMN recurrence_interval INTEGER DEFAULT 1" },
+        { name: 'recurrence_days', sql: "ALTER TABLE schedules ADD COLUMN recurrence_days TEXT DEFAULT NULL" },
+        { name: 'recurrence_end_type', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_type TEXT DEFAULT 'never'" },
+        { name: 'recurrence_end_date', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_date TEXT DEFAULT NULL" },
+        { name: 'recurrence_end_count', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_count INTEGER DEFAULT NULL" },
+      ];
+
+      for (const col of missingColumns) {
+        if (!columns.includes(col.name)) {
+          await db.execAsync(col.sql);
+          console.log(`Migration: Added ${col.name} column to schedules table`);
+        }
+      }
+    }
+  } catch (e) {
+    console.log('Schedules migration check skipped:', e);
+  }
+
   await db.execAsync(`
     -- Categories table (untuk Task dan Notes)
     CREATE TABLE IF NOT EXISTS categories (

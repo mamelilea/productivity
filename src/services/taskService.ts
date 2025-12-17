@@ -164,6 +164,10 @@ export const updateTask = async (id: number, input: UpdateTaskInput): Promise<vo
         updates.push('type = ?');
         values.push(input.type);
     }
+    if (input.custom_type !== undefined) {
+        updates.push('custom_type = ?');
+        values.push(input.custom_type);
+    }
     if (input.status !== undefined) {
         updates.push('status = ?');
         values.push(input.status);

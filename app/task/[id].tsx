@@ -136,7 +136,7 @@ export default function TaskDetailScreen() {
         <View style={styles.headerBadges}>
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>
-              {task.type === 'KULIAH' ? '📚 Tugas Kuliah' : '📋 Non-Kuliah'}
+              {task.type === 'KULIAH' ? '📚 Tugas Kuliah' : task.type === 'CUSTOM' ? `🏷️ ${task.custom_type || 'Custom'}` : '📋 Non-Kuliah'}
             </Text>
           </View>
           <View style={styles.headerBadge}>
@@ -440,6 +440,7 @@ const styles = StyleSheet.create({
   statusButtonText: {
     fontSize: 13,
     fontWeight: '600',
+    textAlign: 'center',
   },
   infoCard: {
     padding: 16,
