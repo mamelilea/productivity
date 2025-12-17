@@ -50,12 +50,14 @@ export default function CalendarDayDetailScreen() {
     return t.deadline.split('T')[0] === date;
   });
   
-  // Parse time from ISO string to hours/minutes
+  // Parse time from ISO string to hours/minutes (using local time)
   const parseTime = (timeStr: string): { hour: number; minute: number } => {
-    const timePart = timeStr.split('T')[1];
-    if (!timePart) return { hour: 0, minute: 0 };
-    const [hour, minute] = timePart.split(':').map(Number);
-    return { hour: hour || 0, minute: minute || 0 };
+    if (!timeStr) return { hour: 0, minute: 0 };
+    const dateObj = new Date(timeStr);
+    return { 
+      hour: dateObj.getHours(), 
+      minute: dateObj.getMinutes() 
+    };
   };
   
   // Calculate position and height for schedule block
