@@ -1,5 +1,5 @@
 import { useColorScheme } from '@/components/useColorScheme';
-import { LoadingSpinner } from '@/src/components';
+import { LoadingSpinner, SimpleMarkdownRenderer } from '@/src/components';
 import { TaskStatus, TaskWithDetails } from '@/src/models';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
@@ -286,9 +286,7 @@ export default function TaskDetailScreen() {
           <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
             📝 Deskripsi
           </Text>
-          <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
-            {task.description}
-          </Text>
+          <SimpleMarkdownRenderer content={task.description} />
         </View>
       )}
       
@@ -336,16 +334,28 @@ export default function TaskDetailScreen() {
         )}
       </View>
       
-      {/* Delete Button */}
-      <TouchableOpacity
-        style={[styles.deleteButton, { borderColor: colors.danger }]}
-        onPress={handleDelete}
-      >
-        <Ionicons name="trash-outline" size={20} color={colors.danger} />
-        <Text style={[styles.deleteButtonText, { color: colors.danger }]}>
-          Hapus Tugas
-        </Text>
-      </TouchableOpacity>
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.editButton, { backgroundColor: colors.primary }]}
+          onPress={() => router.push(`/task/edit/${id}`)}
+        >
+          <Ionicons name="create-outline" size={20} color={colors.textInverse} />
+          <Text style={[styles.editButtonText, { color: colors.textInverse }]}>
+            Edit Tugas
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.deleteButton, { borderColor: colors.danger }]}
+          onPress={handleDelete}
+        >
+          <Ionicons name="trash-outline" size={20} color={colors.danger} />
+          <Text style={[styles.deleteButtonText, { color: colors.danger }]}>
+            Hapus
+          </Text>
+        </TouchableOpacity>
+      </View>
       
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -496,19 +506,36 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
   },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 16,
+    padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
+    gap: 6,
   },
   deleteButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });

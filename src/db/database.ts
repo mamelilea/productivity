@@ -75,7 +75,8 @@ export const initializeDatabase = async (): Promise<void> => {
       title TEXT NOT NULL,
       description TEXT,
       category_id INTEGER,
-      type TEXT NOT NULL CHECK(type IN ('KULIAH', 'NON_KULIAH')),
+      type TEXT NOT NULL CHECK(type IN ('KULIAH', 'NON_KULIAH', 'CUSTOM')),
+      custom_type TEXT DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'TODO' CHECK(status IN ('TODO', 'PROGRESS', 'DONE')),
       priority TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(priority IN ('LOW', 'MEDIUM', 'HIGH')),
       deadline TEXT,
@@ -110,9 +111,16 @@ export const initializeDatabase = async (): Promise<void> => {
       title TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
       category_id INTEGER,
+      is_private INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       updated_at TEXT DEFAULT (datetime('now', 'localtime')),
       FOREIGN KEY (category_id) REFERENCES categories(id)
+    );
+
+    -- App settings table (untuk sandi dan pengaturan lainnya)
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
 
     -- Schedules table (jadwal kuliah, UTS/UAS, custom)
@@ -120,13 +128,30 @@ export const initializeDatabase = async (): Promise<void> => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('KULIAH', 'UTS', 'UAS', 'CUSTOM')),
+      custom_type TEXT DEFAULT NULL,
+      description TEXT DEFAULT '',
       start_time TEXT NOT NULL,
       end_time TEXT,
       day_of_week INTEGER CHECK(day_of_week BETWEEN 0 AND 6),
       is_recurring INTEGER DEFAULT 0,
+      recurrence_type TEXT DEFAULT 'none' CHECK(recurrence_type IN ('none', 'daily', 'weekly', 'monthly', 'yearly', 'custom')),
+      recurrence_interval INTEGER DEFAULT 1,
+      recurrence_days TEXT DEFAULT NULL,
+      recurrence_end_type TEXT DEFAULT 'never' CHECK(recurrence_end_type IN ('never', 'date', 'count')),
+      recurrence_end_date TEXT DEFAULT NULL,
+      recurrence_end_count INTEGER DEFAULT NULL,
       location TEXT,
       color TEXT DEFAULT '#6366F1',
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+
+    -- Schedule links table (link pendukung per jadwal)
+    CREATE TABLE IF NOT EXISTS schedule_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      label TEXT,
+      FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
     );
 
     -- Notifications table (reminder untuk task & schedule)
@@ -142,14 +167,25 @@ export const initializeDatabase = async (): Promise<void> => {
       expo_notification_id TEXT
     );
 
-    -- Logbook entries table (catatan aktivitas harian)
+    -- Logbook categories table (kategori logbook custom)
+    CREATE TABLE IF NOT EXISTS logbook_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#6366F1',
+      icon TEXT DEFAULT '📝',
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+
+    -- Logbook entries table (catatan aktivitas harian per kategori)
     CREATE TABLE IF NOT EXISTS logbook_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL UNIQUE,
+      category_id INTEGER,
+      date TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
       tags TEXT DEFAULT '[]',
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
-      updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (category_id) REFERENCES logbook_categories(id) ON DELETE CASCADE
     );
 
     -- Finance categories table (kategori keuangan custom)
@@ -174,13 +210,14 @@ export const initializeDatabase = async (): Promise<void> => {
       FOREIGN KEY (category_id) REFERENCES finance_categories(id)
     );
 
-    -- Monthly budgets table (anggaran bulanan)
+    -- Monthly budgets table (anggaran bulanan dan harian)
     CREATE TABLE IF NOT EXISTS monthly_budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       year INTEGER NOT NULL,
       month INTEGER NOT NULL CHECK(month BETWEEN 1 AND 12),
       planned_income REAL DEFAULT 0,
       planned_expense REAL DEFAULT 0,
+      daily_budget REAL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       updated_at TEXT DEFAULT (datetime('now', 'localtime')),
       UNIQUE(year, month)

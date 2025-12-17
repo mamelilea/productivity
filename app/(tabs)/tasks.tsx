@@ -1,6 +1,7 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import { EmptyState, LoadingSpinner, TaskCard } from '@/src/components';
-import { TaskStatus, TaskType } from '@/src/models';
+import { Category, TaskStatus, TaskType } from '@/src/models';
+import * as categoryService from '@/src/services/categoryService';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
@@ -10,6 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
     FlatList,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -28,10 +30,22 @@ export default function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('ALL');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL');
+  const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   
   useEffect(() => {
     fetchTasks();
+    loadCategories();
   }, []);
+
+  const loadCategories = async () => {
+    try {
+      const cats = await categoryService.getCategoriesByType('TASK');
+      setCategories(cats);
+    } catch (error) {
+      console.error('Failed to load categories', error);
+    }
+  };
   
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -49,12 +63,31 @@ export default function TasksScreen() {
     await refreshTaskData();
   };
   
-  // Filter tasks
-  const filteredTasks = tasks.filter(task => {
-    if (filterType !== 'ALL' && task.type !== filterType) return false;
-    if (filterStatus !== 'ALL' && task.status !== filterStatus) return false;
-    return true;
-  });
+  // Filter and sort tasks
+  const filteredTasks = tasks
+    .filter(task => {
+      if (filterType !== 'ALL' && task.type !== filterType) return false;
+      if (filterStatus !== 'ALL' && task.status !== filterStatus) return false;
+      if (filterCategoryId !== null && task.category_id !== filterCategoryId) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by status first: TODO > PROGRESS > DONE
+      const statusOrder = { 'TODO': 0, 'PROGRESS': 1, 'DONE': 2 };
+      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      
+      // Then sort by deadline: closest first, null deadlines last
+      if (a.deadline && b.deadline) {
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      }
+      if (a.deadline && !b.deadline) return -1;
+      if (!a.deadline && b.deadline) return 1;
+      
+      // Then by priority: HIGH > MEDIUM > LOW
+      const priorityOrder = { 'HIGH': 0, 'MEDIUM': 1, 'LOW': 2 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
 
   const renderFilterChip = (
     label: string, 
@@ -65,6 +98,7 @@ export default function TasksScreen() {
     const isActive = value === currentValue;
     return (
       <TouchableOpacity
+        key={value}
         style={[
           styles.filterChip,
           { 
@@ -77,6 +111,35 @@ export default function TasksScreen() {
         <Text style={[
           styles.filterChipText,
           { color: isActive ? colors.textInverse : colors.textSecondary }
+        ]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCategoryChip = (category: Category | null) => {
+    const isActive = category === null 
+      ? filterCategoryId === null 
+      : filterCategoryId === category.id;
+    const label = category === null ? 'Semua' : category.name;
+    const chipColor = category?.color || colors.primary;
+    
+    return (
+      <TouchableOpacity
+        key={category?.id || 'all'}
+        style={[
+          styles.filterChip,
+          { 
+            backgroundColor: isActive ? chipColor : colors.surfaceVariant,
+            borderColor: isActive ? chipColor : colors.border,
+          }
+        ]}
+        onPress={() => setFilterCategoryId(category?.id || null)}
+      >
+        <Text style={[
+          styles.filterChipText,
+          { color: isActive ? '#FFFFFF' : colors.textSecondary }
         ]}>
           {label}
         </Text>
@@ -112,12 +175,30 @@ export default function TasksScreen() {
             {renderFilterChip('Selesai', 'DONE', filterStatus, () => setFilterStatus('DONE'))}
           </View>
         </View>
+
+        {/* Category Filter */}
+        {categories.length > 0 && (
+          <View style={styles.filterRow}>
+            <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Kategori:</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChips}
+            >
+              {renderCategoryChip(null)}
+              {categories.map(cat => renderCategoryChip(cat))}
+            </ScrollView>
+          </View>
+        )}
       </View>
       
       {/* Task Count */}
       <View style={styles.countRow}>
         <Text style={[styles.countText, { color: colors.textSecondary }]}>
           {filteredTasks.length} tugas ditemukan
+        </Text>
+        <Text style={[styles.sortInfo, { color: colors.textMuted }]}>
+          Diurutkan berdasarkan deadline terdekat
         </Text>
       </View>
       
@@ -192,11 +273,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   countRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
   countText: {
     fontSize: 13,
+  },
+  sortInfo: {
+    fontSize: 11,
   },
   emptyContainer: {
     flex: 1,

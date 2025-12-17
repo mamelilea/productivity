@@ -69,6 +69,7 @@ export const STATUS_OPTIONS = [
 export const TASK_TYPE_OPTIONS = [
     { value: 'KULIAH', label: 'Tugas Kuliah' },
     { value: 'NON_KULIAH', label: 'Tugas Non-Kuliah' },
+    { value: 'CUSTOM', label: 'Tipe Lainnya' },
 ];
 
 // Assignment type options
@@ -107,4 +108,29 @@ export const CATEGORY_COLORS = [
     '#10B981', // Emerald
     '#3B82F6', // Blue
     '#14B8A6', // Teal
+];
+
+// Recurrence type options
+export const RECURRENCE_TYPE_OPTIONS = [
+    { value: 'none', label: 'Tidak Berulang' },
+    { value: 'daily', label: 'Setiap Hari' },
+    { value: 'weekly', label: 'Setiap Minggu' },
+    { value: 'monthly', label: 'Setiap Bulan' },
+    { value: 'yearly', label: 'Setiap Tahun' },
+    { value: 'custom', label: 'Kustom...' },
+];
+
+// Recurrence end type options
+export const RECURRENCE_END_OPTIONS = [
+    { value: 'never', label: 'Tidak Pernah' },
+    { value: 'date', label: 'Pada Tanggal' },
+    { value: 'count', label: 'Setelah N Kekerapan' },
+];
+
+// Reminder unit options for custom reminder
+export const REMINDER_UNIT_OPTIONS = [
+    { value: 1, label: 'menit', labelSingular: 'menit' },
+    { value: 60, label: 'jam', labelSingular: 'jam' },
+    { value: 1440, label: 'hari', labelSingular: 'hari' },
+    { value: 10080, label: 'minggu', labelSingular: 'minggu' },
 ];

@@ -97,6 +97,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
             if (taskFilter.type === 'ALL') {
                 tasks = await taskService.getAllTasks();
+            } else if (taskFilter.type === 'CUSTOM') {
+                // For CUSTOM type, fetch all and filter
+                tasks = (await taskService.getAllTasks()).filter(t => t.type === 'CUSTOM');
             } else {
                 tasks = await taskService.getTasksByType(taskFilter.type);
             }

@@ -1,6 +1,8 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
-import { ScheduleType } from '@/src/models';
+import { CustomReminderInput, RecurrencePickerModal } from '@/src/components';
+import { RecurrenceSettings } from '@/src/components/RecurrencePickerModal';
+import { RecurrenceType, ScheduleType } from '@/src/models';
 import * as notificationService from '@/src/services/notificationService';
 import * as scheduleService from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
@@ -8,6 +10,7 @@ import {
     CATEGORY_COLORS,
     COLORS,
     DARK_COLORS,
+    RECURRENCE_TYPE_OPTIONS,
     REMINDER_PRESETS,
     SCHEDULE_TYPE_OPTIONS
 } from '@/src/utils/constants';
@@ -17,6 +20,8 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     StyleSheet,
     Switch,
@@ -36,16 +41,31 @@ export default function NewScheduleScreen() {
   // Form state
   const [title, setTitle] = useState('');
   const [type, setType] = useState<ScheduleType>('KULIAH');
+  const [customType, setCustomType] = useState('');
+  const [description, setDescription] = useState('');
   const [startTimeDate, setStartTimeDate] = useState<Date | null>(null);
   const [endTimeDate, setEndTimeDate] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
-  const [isRecurring, setIsRecurring] = useState(true);
-  const [dayOfWeek, setDayOfWeek] = useState<number>(1); // Senin
   const [selectedColor, setSelectedColor] = useState(CATEGORY_COLORS[0]);
+  
+  // Links state
+  const [links, setLinks] = useState<{url: string, label: string}[]>([]);
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  
+  // Recurrence state
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>('none');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]);
+  const [recurrenceEndType, setRecurrenceEndType] = useState<'never' | 'date' | 'count'>('never');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<Date | null>(null);
+  const [recurrenceEndCount, setRecurrenceEndCount] = useState<number | null>(null);
+  const [showRecurrenceModal, setShowRecurrenceModal] = useState(false);
   
   // Reminder state
   const [enableReminder, setEnableReminder] = useState(false);
   const [reminderOffset, setReminderOffset] = useState(30); // 30 minutes
+  const [useCustomReminder, setUseCustomReminder] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -62,16 +82,38 @@ export default function NewScheduleScreen() {
     
     setIsSubmitting(true);
     try {
+      const isRecurring = recurrenceType !== 'none';
+      const dayOfWeek = isRecurring && recurrenceType === 'weekly' && recurrenceDays.length > 0
+        ? recurrenceDays[0]
+        : startTimeDate.getDay();
+      
       const scheduleId = await scheduleService.createSchedule({
         title: title.trim(),
         type,
+        custom_type: type === 'CUSTOM' ? customType.trim() : undefined,
+        description: description.trim() || undefined,
         start_time: startTimeDate.toISOString(),
         end_time: endTimeDate ? endTimeDate.toISOString() : undefined,
         location: location.trim() || undefined,
         is_recurring: isRecurring,
-        day_of_week: isRecurring ? dayOfWeek : undefined,
+        day_of_week: dayOfWeek,
+        recurrence_type: recurrenceType,
+        recurrence_interval: recurrenceInterval,
+        recurrence_days: recurrenceDays.length > 0 ? recurrenceDays : undefined,
+        recurrence_end_type: recurrenceEndType,
+        recurrence_end_date: recurrenceEndDate?.toISOString() || undefined,
+        recurrence_end_count: recurrenceEndCount || undefined,
         color: selectedColor,
       });
+      
+      // Add links
+      for (const link of links) {
+        await scheduleService.addScheduleLink({
+          schedule_id: scheduleId,
+          url: link.url,
+          label: link.label || undefined,
+        });
+      }
       
       // Schedule reminder if enabled
       if (enableReminder && startTimeDate) {
@@ -92,6 +134,44 @@ export default function NewScheduleScreen() {
     }
   };
 
+  const handleRecurrenceSave = (settings: RecurrenceSettings) => {
+    setRecurrenceType(settings.recurrenceType);
+    setRecurrenceInterval(settings.interval);
+    setRecurrenceDays(settings.selectedDays);
+    setRecurrenceEndType(settings.endType);
+    setRecurrenceEndDate(settings.endDate);
+    setRecurrenceEndCount(settings.endCount);
+  };
+
+  const addLink = () => {
+    if (!newLinkUrl.trim()) return;
+    setLinks([...links, { url: newLinkUrl.trim(), label: newLinkLabel.trim() }]);
+    setNewLinkUrl('');
+    setNewLinkLabel('');
+  };
+
+  const removeLink = (index: number) => {
+    setLinks(links.filter((_, i) => i !== index));
+  };
+
+  const getRecurrenceLabel = () => {
+    if (recurrenceType === 'none') return 'Tidak Berulang';
+    const option = RECURRENCE_TYPE_OPTIONS.find(o => o.value === recurrenceType);
+    if (recurrenceType === 'custom' || recurrenceType === 'weekly') {
+      if (recurrenceDays.length > 0) {
+        const dayLabels = recurrenceDays.map(d => NAMA_HARI[d].substring(0, 3)).join(', ');
+        return `Setiap ${recurrenceInterval > 1 ? recurrenceInterval + ' ' : ''}minggu (${dayLabels})`;
+      }
+    }
+    if (recurrenceInterval > 1) {
+      const unitLabel = recurrenceType === 'daily' ? 'hari' 
+        : recurrenceType === 'weekly' ? 'minggu'
+        : recurrenceType === 'monthly' ? 'bulan' : 'tahun';
+      return `Setiap ${recurrenceInterval} ${unitLabel}`;
+    }
+    return option?.label || 'Berulang';
+  };
+
   const renderOptionButton = (
     label: string, 
     value: string, 
@@ -101,6 +181,7 @@ export default function NewScheduleScreen() {
     const isActive = value === currentValue;
     return (
       <TouchableOpacity
+        key={value}
         style={[
           styles.optionButton,
           { 
@@ -120,11 +201,19 @@ export default function NewScheduleScreen() {
     );
   };
 
+  const isRecurring = recurrenceType !== 'none';
+
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: colors.background }]}
-      showsVerticalScrollIndicator={false}
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={100}
     >
+      <ScrollView 
+        style={[styles.container, { backgroundColor: colors.background }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
       {/* Title */}
       <View style={styles.formGroup}>
         <Text style={[styles.label, { color: colors.textPrimary }]}>
@@ -153,29 +242,84 @@ export default function NewScheduleScreen() {
             renderOptionButton(opt.label, opt.value, type, () => setType(opt.value as ScheduleType))
           )}
         </View>
-      </View>
-      
-      {/* Recurring Toggle */}
-      <View style={styles.formGroup}>
-        <View style={styles.switchRow}>
-          <View>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>
-              Jadwal Berulang
-            </Text>
-            <Text style={[styles.helperText, { color: colors.textMuted }]}>
-              Aktifkan untuk jadwal mingguan
-            </Text>
-          </View>
-          <Switch
-            value={isRecurring}
-            onValueChange={setIsRecurring}
-            trackColor={{ false: colors.border, true: colors.primary }}
+        
+        {/* Custom Type Input */}
+        {type === 'CUSTOM' && (
+          <TextInput
+            style={[styles.input, { 
+              backgroundColor: colors.surface, 
+              color: colors.textPrimary,
+              borderColor: colors.border,
+              marginTop: 12,
+            }]}
+            placeholder="Ketik tipe jadwal..."
+            placeholderTextColor={colors.textMuted}
+            value={customType}
+            onChangeText={setCustomType}
           />
-        </View>
+        )}
+      </View>
+
+      {/* Description */}
+      <View style={styles.formGroup}>
+        <Text style={[styles.label, { color: colors.textPrimary }]}>
+          Deskripsi
+        </Text>
+        <TextInput
+          style={[styles.input, styles.textArea, { 
+            backgroundColor: colors.surface, 
+            color: colors.textPrimary,
+            borderColor: colors.border 
+          }]}
+          placeholder="Tambahkan deskripsi jadwal..."
+          placeholderTextColor={colors.textMuted}
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
       </View>
       
-      {/* Day of Week (for recurring) */}
-      {isRecurring && (
+      {/* Recurrence Type */}
+      <View style={styles.formGroup}>
+        <Text style={[styles.label, { color: colors.textPrimary }]}>
+          Pengulangan
+        </Text>
+        <View style={styles.optionRow}>
+          {RECURRENCE_TYPE_OPTIONS.slice(0, 4).map(opt => 
+            renderOptionButton(
+              opt.label, 
+              opt.value, 
+              recurrenceType, 
+              () => {
+                setRecurrenceType(opt.value as RecurrenceType);
+                if (opt.value !== 'none') {
+                  setRecurrenceInterval(1);
+                }
+              }
+            )
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.customRecurrenceButton, { 
+            backgroundColor: colors.surfaceVariant,
+            borderColor: colors.border,
+          }]}
+          onPress={() => setShowRecurrenceModal(true)}
+        >
+          <Ionicons name="settings-outline" size={18} color={colors.textSecondary} />
+          <Text style={[styles.customRecurrenceText, { color: colors.textSecondary }]}>
+            {recurrenceType === 'custom' || recurrenceDays.length > 0
+              ? getRecurrenceLabel()
+              : 'Pengulangan Khusus...'}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Day of Week (for weekly without custom days) */}
+      {isRecurring && recurrenceType === 'weekly' && recurrenceDays.length === 0 && (
         <View style={styles.formGroup}>
           <Text style={[styles.label, { color: colors.textPrimary }]}>
             Hari
@@ -187,14 +331,24 @@ export default function NewScheduleScreen() {
                 style={[
                   styles.dayButton,
                   { 
-                    backgroundColor: dayOfWeek === index ? colors.primary : colors.surfaceVariant,
+                    backgroundColor: recurrenceDays.includes(index) || (recurrenceDays.length === 0 && startTimeDate?.getDay() === index)
+                      ? colors.primary 
+                      : colors.surfaceVariant,
                   }
                 ]}
-                onPress={() => setDayOfWeek(index)}
+                onPress={() => {
+                  if (recurrenceDays.includes(index)) {
+                    setRecurrenceDays(recurrenceDays.filter(d => d !== index));
+                  } else {
+                    setRecurrenceDays([...recurrenceDays, index].sort());
+                  }
+                }}
               >
                 <Text style={[
                   styles.dayButtonText,
-                  { color: dayOfWeek === index ? colors.textInverse : colors.textSecondary }
+                  { color: recurrenceDays.includes(index) 
+                    ? colors.textInverse 
+                    : colors.textSecondary }
                 ]}>
                   {day.substring(0, 3)}
                 </Text>
@@ -240,6 +394,67 @@ export default function NewScheduleScreen() {
           onChangeText={setLocation}
         />
       </View>
+
+      {/* Links */}
+      <View style={styles.formGroup}>
+        <Text style={[styles.label, { color: colors.textPrimary }]}>
+          Link
+        </Text>
+        
+        {/* Existing Links */}
+        {links.map((link, index) => (
+          <View key={index} style={[styles.linkItem, { backgroundColor: colors.surfaceVariant }]}>
+            <View style={styles.linkContent}>
+              <Text style={[styles.linkLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                {link.label || link.url}
+              </Text>
+              <Text style={[styles.linkUrl, { color: colors.textMuted }]} numberOfLines={1}>
+                {link.url}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => removeLink(index)}>
+              <Ionicons name="close-circle" size={22} color={colors.danger} />
+            </TouchableOpacity>
+          </View>
+        ))}
+        
+        {/* Add Link Form */}
+        <View style={styles.addLinkForm}>
+          <TextInput
+            style={[styles.input, styles.linkInput, { 
+              backgroundColor: colors.surface, 
+              color: colors.textPrimary,
+              borderColor: colors.border 
+            }]}
+            placeholder="URL (contoh: https://...)"
+            placeholderTextColor={colors.textMuted}
+            value={newLinkUrl}
+            onChangeText={setNewLinkUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TextInput
+            style={[styles.input, styles.linkInput, { 
+              backgroundColor: colors.surface, 
+              color: colors.textPrimary,
+              borderColor: colors.border 
+            }]}
+            placeholder="Label (opsional)"
+            placeholderTextColor={colors.textMuted}
+            value={newLinkLabel}
+            onChangeText={setNewLinkLabel}
+          />
+          <TouchableOpacity
+            style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
+            onPress={addLink}
+          >
+            <Ionicons name="add" size={20} color={colors.textInverse} />
+            <Text style={[styles.addLinkButtonText, { color: colors.textInverse }]}>
+              Tambah Link
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
       
       {/* Color */}
       <View style={styles.formGroup}>
@@ -279,16 +494,46 @@ export default function NewScheduleScreen() {
         </View>
         
         {enableReminder && (
-          <View style={[styles.optionRow, { marginTop: 12 }]}>
-            {REMINDER_PRESETS.slice(0, 4).map(preset => 
-              renderOptionButton(
-                preset.label, 
-                preset.value.toString(), 
-                reminderOffset.toString(), 
-                () => setReminderOffset(preset.value)
-              )
+          <>
+            <View style={[styles.optionRow, { marginTop: 12 }]}>
+              {REMINDER_PRESETS.slice(0, 4).map(preset => 
+                renderOptionButton(
+                  preset.label, 
+                  preset.value.toString(), 
+                  useCustomReminder ? '' : reminderOffset.toString(), 
+                  () => {
+                    setReminderOffset(preset.value);
+                    setUseCustomReminder(false);
+                  }
+                )
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.optionButton,
+                  { 
+                    backgroundColor: useCustomReminder ? colors.primary : colors.surfaceVariant,
+                    borderColor: useCustomReminder ? colors.primary : colors.border,
+                  }
+                ]}
+                onPress={() => setUseCustomReminder(true)}
+              >
+                <Text style={[
+                  styles.optionButtonText,
+                  { color: useCustomReminder ? colors.textInverse : colors.textSecondary }
+                ]}>
+                  Kustom
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {useCustomReminder && (
+              <CustomReminderInput
+                value={reminderOffset}
+                onChange={setReminderOffset}
+                enabled={useCustomReminder}
+              />
             )}
-          </View>
+          </>
         )}
       </View>
       
@@ -309,7 +554,23 @@ export default function NewScheduleScreen() {
       </TouchableOpacity>
       
       <View style={{ height: 40 }} />
+
+      {/* Recurrence Modal */}
+      <RecurrencePickerModal
+        visible={showRecurrenceModal}
+        onClose={() => setShowRecurrenceModal(false)}
+        onSave={handleRecurrenceSave}
+        initialSettings={{
+          recurrenceType,
+          interval: recurrenceInterval,
+          selectedDays: recurrenceDays,
+          endType: recurrenceEndType,
+          endDate: recurrenceEndDate,
+          endCount: recurrenceEndCount,
+        }}
+      />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -332,6 +593,9 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
   },
+  textArea: {
+    minHeight: 80,
+  },
   helperText: {
     fontSize: 12,
     marginTop: 4,
@@ -350,6 +614,19 @@ const styles = StyleSheet.create({
   optionButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  customRecurrenceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 12,
+    gap: 10,
+  },
+  customRecurrenceText: {
+    flex: 1,
+    fontSize: 14,
   },
   dayRow: {
     flexDirection: 'row',
@@ -390,6 +667,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  linkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  linkUrl: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  addLinkForm: {
+    gap: 8,
+  },
+  linkInput: {
+    marginBottom: 0,
+  },
+  addLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  addLinkButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   submitButton: {
     flexDirection: 'row',

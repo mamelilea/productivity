@@ -1,7 +1,8 @@
 import { useColorScheme } from '@/components/useColorScheme';
-import { LoadingSpinner } from '@/src/components';
+import { LoadingSpinner, PasswordPrompt, SimpleMarkdownRenderer } from '@/src/components';
 import { NoteWithCategory } from '@/src/models';
 import * as noteService from '@/src/services/noteService';
+import * as settingsService from '@/src/services/settingsService';
 import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { formatTanggalWaktu } from '@/src/utils/dateUtils';
@@ -13,7 +14,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -24,18 +24,13 @@ export default function NoteDetailScreen() {
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
-  const { categories, fetchNotes, fetchCategories } = useAppStore();
-  const noteCategories = categories.filter(c => c.type === 'NOTE');
+  const { fetchNotes } = useAppStore();
   
   const [note, setNote] = useState<NoteWithCategory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // Edit state
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [isLocked, setIsLocked] = useState(true);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
   
   const loadNote = async () => {
     if (!id) return;
@@ -43,10 +38,11 @@ export default function NoteDetailScreen() {
     try {
       const noteData = await noteService.getNoteById(parseInt(id));
       setNote(noteData);
-      if (noteData) {
-        setTitle(noteData.title);
-        setContent(noteData.content);
-        setCategoryId(noteData.category_id);
+      // If note is private, keep it locked initially
+      if (noteData?.is_private) {
+        setIsLocked(true);
+      } else {
+        setIsLocked(false);
       }
     } catch (error) {
       Alert.alert('Error', 'Gagal memuat catatan');
@@ -57,29 +53,20 @@ export default function NoteDetailScreen() {
   
   useEffect(() => {
     loadNote();
-    fetchCategories();
   }, [id]);
   
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert('Error', 'Judul catatan harus diisi');
-      return;
-    }
-    
-    setIsSaving(true);
-    try {
-      await noteService.updateNote(parseInt(id!), {
-        title: title.trim(),
-        content: content.trim(),
-        category_id: categoryId || undefined,
-      });
-      await loadNote();
-      await fetchNotes();
-      setIsEditing(false);
-    } catch (error) {
-      Alert.alert('Error', 'Gagal menyimpan catatan');
-    } finally {
-      setIsSaving(false);
+  const handleUnlock = () => {
+    setShowPasswordPrompt(true);
+  };
+  
+  const handlePasswordSubmit = async (password: string) => {
+    const isValid = await settingsService.verifyNotePassword(password);
+    if (isValid) {
+      setIsLocked(false);
+      setShowPasswordPrompt(false);
+      setPasswordError('');
+    } else {
+      setPasswordError('Sandi salah. Coba lagi.');
     }
   };
   
@@ -120,172 +107,111 @@ export default function NoteDetailScreen() {
     );
   }
 
+  // Show locked state for private notes
+  if (note.is_private && isLocked) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.lockedContainer}>
+          <View style={[styles.lockIconContainer, { backgroundColor: colors.warning + '20' }]}>
+            <Ionicons name="lock-closed" size={48} color={colors.warning} />
+          </View>
+          <Text style={[styles.lockedTitle, { color: colors.textPrimary }]}>
+            Catatan Terkunci
+          </Text>
+          <Text style={[styles.lockedSubtitle, { color: colors.textMuted }]}>
+            Catatan ini dilindungi dengan sandi
+          </Text>
+          <TouchableOpacity
+            style={[styles.unlockButton, { backgroundColor: colors.primary }]}
+            onPress={handleUnlock}
+          >
+            <Ionicons name="key" size={20} color={colors.textInverse} />
+            <Text style={[styles.unlockButtonText, { color: colors.textInverse }]}>
+              Buka dengan Sandi
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <PasswordPrompt
+          visible={showPasswordPrompt}
+          onClose={() => {
+            setShowPasswordPrompt(false);
+            setPasswordError('');
+          }}
+          onSubmit={handlePasswordSubmit}
+          error={passwordError}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header Actions */}
-      <View style={[styles.headerActions, { backgroundColor: colors.surface }]}>
-        {isEditing ? (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.surfaceVariant }]}
-              onPress={() => {
-                setTitle(note.title);
-                setContent(note.content);
-                setCategoryId(note.category_id);
-                setIsEditing(false);
-              }}
-            >
-              <Ionicons name="close" size={20} color={colors.textSecondary} />
-              <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>
-                Batal
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.success }]}
-              onPress={handleSave}
-              disabled={isSaving}
-            >
-              <Ionicons name="checkmark" size={20} color={colors.textInverse} />
-              <Text style={[styles.actionButtonText, { color: colors.textInverse }]}>
-                {isSaving ? 'Menyimpan...' : 'Simpan'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.primary }]}
-              onPress={() => setIsEditing(true)}
-            >
-              <Ionicons name="pencil" size={20} color={colors.textInverse} />
-              <Text style={[styles.actionButtonText, { color: colors.textInverse }]}>
-                Edit
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.danger }]}
-              onPress={handleDelete}
-            >
-              <Ionicons name="trash" size={20} color={colors.textInverse} />
-              <Text style={[styles.actionButtonText, { color: colors.textInverse }]}>
-                Hapus
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-      
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {isEditing ? (
-          // Edit Mode
-          <>
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Judul</Text>
-              <TextInput
-                style={[styles.input, { 
-                  backgroundColor: colors.surface, 
-                  color: colors.textPrimary,
-                  borderColor: colors.border 
-                }]}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Judul catatan"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Kategori</Text>
-              <View style={styles.categoryRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.categoryChip,
-                    { backgroundColor: categoryId === null ? colors.primary : colors.surfaceVariant }
-                  ]}
-                  onPress={() => setCategoryId(null)}
-                >
-                  <Text style={[
-                    styles.categoryChipText,
-                    { color: categoryId === null ? colors.textInverse : colors.textSecondary }
-                  ]}>
-                    Tanpa Kategori
-                  </Text>
-                </TouchableOpacity>
-                {noteCategories.map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
-                      styles.categoryChip,
-                      { backgroundColor: categoryId === cat.id ? cat.color : colors.surfaceVariant }
-                    ]}
-                    onPress={() => setCategoryId(cat.id)}
-                  >
-                    <Text style={[
-                      styles.categoryChipText,
-                      { color: categoryId === cat.id ? colors.textInverse : colors.textSecondary }
-                    ]}>
-                      {cat.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+        {/* Header */}
+        <View style={styles.noteHeader}>
+          <View style={styles.headerRow}>
+            {note.category_name && (
+              <View style={[styles.categoryBadge, { backgroundColor: note.category_color + '20' }]}>
+                <View style={[styles.categoryDot, { backgroundColor: note.category_color }]} />
+                <Text style={[styles.categoryBadgeText, { color: note.category_color }]}>
+                  {note.category_name}
+                </Text>
               </View>
-            </View>
-            
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Isi</Text>
-              <TextInput
-                style={[styles.input, styles.contentInput, { 
-                  backgroundColor: colors.surface, 
-                  color: colors.textPrimary,
-                  borderColor: colors.border 
-                }]}
-                value={content}
-                onChangeText={setContent}
-                placeholder="Isi catatan..."
-                placeholderTextColor={colors.textMuted}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </>
-        ) : (
-          // View Mode
-          <>
-            {/* Title & Category */}
-            <View style={styles.noteHeader}>
-              {note.category_name && (
-                <View style={[styles.categoryBadge, { backgroundColor: note.category_color + '20' }]}>
-                  <View style={[styles.categoryDot, { backgroundColor: note.category_color }]} />
-                  <Text style={[styles.categoryBadgeText, { color: note.category_color }]}>
-                    {note.category_name}
-                  </Text>
-                </View>
-              )}
-              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>
-                {note.title}
-              </Text>
-              <Text style={[styles.metaText, { color: colors.textMuted }]}>
-                Diperbarui: {formatTanggalWaktu(note.updated_at)}
-              </Text>
-            </View>
-            
-            {/* Content */}
-            <View style={[styles.contentCard, { backgroundColor: colors.surface }]}>
-              {note.content ? (
-                <Text style={[styles.noteContent, { color: colors.textPrimary }]}>
-                  {note.content}
+            )}
+            {note.is_private && (
+              <View style={[styles.privateBadge, { backgroundColor: colors.warning + '20' }]}>
+                <Ionicons name="lock-closed" size={12} color={colors.warning} />
+                <Text style={[styles.privateBadgeText, { color: colors.warning }]}>
+                  Private
                 </Text>
-              ) : (
-                <Text style={[styles.emptyContent, { color: colors.textMuted }]}>
-                  Catatan ini kosong. Tap "Edit" untuk menambahkan isi.
-                </Text>
-              )}
-            </View>
-          </>
-        )}
+              </View>
+            )}
+          </View>
+          <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>
+            {note.title}
+          </Text>
+          <Text style={[styles.metaText, { color: colors.textMuted }]}>
+            Diperbarui: {formatTanggalWaktu(note.updated_at)}
+          </Text>
+        </View>
+        
+        {/* Content */}
+        <View style={[styles.contentCard, { backgroundColor: colors.surface }]}>
+          {note.content ? (
+            <SimpleMarkdownRenderer content={note.content} />
+          ) : (
+            <Text style={[styles.emptyContent, { color: colors.textMuted }]}>
+              Catatan ini kosong. Tap "Edit" untuk menambahkan isi.
+            </Text>
+          )}
+        </View>
+        
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.editButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push(`/note/edit/${id}`)}
+          >
+            <Ionicons name="create-outline" size={20} color={colors.textInverse} />
+            <Text style={[styles.editButtonText, { color: colors.textInverse }]}>
+              Edit Catatan
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.deleteButton, { borderColor: colors.danger }]}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.danger} />
+            <Text style={[styles.deleteButtonText, { color: colors.danger }]}>
+              Hapus
+            </Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -302,32 +228,17 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 16,
   },
-  headerActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 12,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   scrollView: {
     flex: 1,
     padding: 16,
   },
   noteHeader: {
     marginBottom: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
   },
   categoryBadge: {
     flexDirection: 'row',
@@ -336,7 +247,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 8,
   },
   categoryDot: {
     width: 6,
@@ -345,6 +255,18 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  privateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  privateBadgeText: {
     fontSize: 12,
     fontWeight: '500',
   },
@@ -360,45 +282,77 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
   },
-  noteContent: {
-    fontSize: 16,
-    lineHeight: 26,
-  },
   emptyContent: {
     fontSize: 16,
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 40,
   },
-  formGroup: {
-    marginBottom: 16,
+  lockedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '500',
+  lockIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  lockedTitle: {
+    fontSize: 22,
+    fontWeight: '600',
     marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
+  lockedSubtitle: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  contentInput: {
-    minHeight: 200,
-  },
-  categoryRow: {
+  unlockButton: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 10,
+  },
+  unlockButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
     gap: 8,
   },
-  categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  editButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: '500',
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

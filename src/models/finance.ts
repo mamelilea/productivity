@@ -26,13 +26,14 @@ export interface Transaction {
     created_at: string;
 }
 
-// Budget bulanan
+// Budget bulanan dan harian
 export interface MonthlyBudget {
     id: number;
     year: number;
     month: number; // 1-12
     planned_income: number;
     planned_expense: number;
+    daily_budget: number;
     created_at: string;
     updated_at: string;
 }
@@ -58,6 +59,7 @@ export interface CreateBudgetInput {
     month: number;
     planned_income: number;
     planned_expense: number;
+    daily_budget?: number;
 }
 
 // Report types
@@ -67,6 +69,18 @@ export interface DailyReport {
     total_expense: number;
     balance: number;
     transactions: Transaction[];
+    daily_budget?: number;
+    budget_status?: 'under' | 'over' | 'warning'; // warning = 80%+
+}
+
+export interface CategoryReport {
+    category_id: number;
+    category_name: string;
+    category_icon: string;
+    category_color: string;
+    total: number;
+    percentage: number;
+    transaction_count: number;
 }
 
 export interface MonthlyReport {
@@ -81,6 +95,11 @@ export interface MonthlyReport {
         income: number;
         expense: number;
     }[];
+    category_breakdown?: {
+        income: CategoryReport[];
+        expense: CategoryReport[];
+    };
+    recommendation?: string;
 }
 
 // Default categories

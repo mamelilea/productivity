@@ -1,8 +1,14 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
-import { SimpleMarkdownInput } from '@/src/components';
-import { AssignmentType, Priority, TaskType } from '@/src/models';
-import * as notificationService from '@/src/services/notificationService';
+import {
+    LoadingSpinner,
+    SimpleMarkdownInput
+} from '@/src/components';
+import {
+    AssignmentType,
+    Priority,
+    TaskType
+} from '@/src/models';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import {
@@ -10,11 +16,10 @@ import {
     COLORS,
     DARK_COLORS,
     PRIORITY_OPTIONS,
-    REMINDER_PRESETS,
     TASK_TYPE_OPTIONS
 } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -29,13 +34,16 @@ import {
     View
 } from 'react-native';
 
-export default function NewTaskScreen() {
+export default function EditTaskScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
-  const { categories, refreshTaskData, fetchCategories } = useAppStore();
-  const taskCategories = categories.filter(c => c.type === 'TASK');
+  const { refreshTaskData } = useAppStore();
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Form state
   const [title, setTitle] = useState('');
@@ -43,7 +51,6 @@ export default function NewTaskScreen() {
   const [type, setType] = useState<TaskType>('NON_KULIAH');
   const [customType, setCustomType] = useState('');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [isToday, setIsToday] = useState(false);
   
@@ -53,19 +60,44 @@ export default function NewTaskScreen() {
   const [courseNotes, setCourseNotes] = useState('');
   
   // Links state
-  const [links, setLinks] = useState<{url: string, label: string}[]>([]);
+  const [links, setLinks] = useState<{id?: number, url: string, label: string}[]>([]);
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newLinkLabel, setNewLinkLabel] = useState('');
   
-  // Reminder state
-  const [enableReminder, setEnableReminder] = useState(false);
-  const [reminderOffset, setReminderOffset] = useState(1440); // 1 day default
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    loadTask();
+  }, [id]);
+  
+  const loadTask = async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const task = await taskService.getTaskById(parseInt(id));
+      if (task) {
+        setTitle(task.title);
+        setDescription(task.description || '');
+        setType(task.type);
+        setCustomType(task.custom_type || '');
+        setPriority(task.priority);
+        setDeadlineDate(task.deadline ? new Date(task.deadline) : null);
+        setIsToday(task.is_today);
+        
+        if (task.course_detail) {
+          setCourseName(task.course_detail.course_name);
+          setAssignmentType(task.course_detail.assignment_type);
+          setCourseNotes(task.course_detail.notes || '');
+        }
+        
+        if (task.links) {
+          setLinks(task.links.map(l => ({ id: l.id, url: l.url, label: l.label || '' })));
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Gagal memuat tugas');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -80,51 +112,41 @@ export default function NewTaskScreen() {
     
     setIsSubmitting(true);
     try {
-      // Create task
-      const taskId = await taskService.createTask({
+      // Update task
+      await taskService.updateTask(parseInt(id!), {
         title: title.trim(),
         description: description.trim() || undefined,
         type,
         custom_type: type === 'CUSTOM' ? customType.trim() : undefined,
         priority,
-        category_id: categoryId || undefined,
         deadline: deadlineDate ? deadlineDate.toISOString() : undefined,
         is_today: isToday,
       });
       
-      // Add course detail if kuliah
+      // Update course detail if kuliah
       if (type === 'KULIAH') {
-        await taskService.createCourseDetail({
-          task_id: taskId,
+        await taskService.updateCourseDetail(parseInt(id!), {
           course_name: courseName.trim(),
           assignment_type: assignmentType,
           notes: courseNotes.trim() || undefined,
         });
       }
       
-      // Add links
+      // Handle links - add new ones
       for (const link of links) {
-        await taskService.addTaskLink({
-          task_id: taskId,
-          url: link.url,
-          label: link.label || undefined,
-        });
-      }
-      
-      // Schedule reminder if enabled and has deadline
-      if (enableReminder && deadlineDate) {
-        await notificationService.createTaskDeadlineReminder(
-          taskId,
-          title.trim(),
-          deadlineDate.toISOString(),
-          reminderOffset
-        );
+        if (!link.id) {
+          await taskService.addTaskLink({
+            task_id: parseInt(id!),
+            url: link.url,
+            label: link.label || undefined,
+          });
+        }
       }
       
       await refreshTaskData();
       router.back();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Gagal membuat tugas');
+      Alert.alert('Error', error.message || 'Gagal menyimpan tugas');
     } finally {
       setIsSubmitting(false);
     }
@@ -137,7 +159,11 @@ export default function NewTaskScreen() {
     setNewLinkLabel('');
   };
 
-  const removeLink = (index: number) => {
+  const removeLink = async (index: number) => {
+    const link = links[index];
+    if (link.id) {
+      await taskService.deleteTaskLink(link.id);
+    }
     setLinks(links.filter((_, i) => i !== index));
   };
 
@@ -170,6 +196,10 @@ export default function NewTaskScreen() {
       </TouchableOpacity>
     );
   };
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -211,7 +241,6 @@ export default function NewTaskScreen() {
             )}
           </View>
           
-          {/* Custom Type Input */}
           {type === 'CUSTOM' && (
             <TextInput
               style={[styles.input, { 
@@ -296,25 +325,6 @@ export default function NewTaskScreen() {
           </View>
         </View>
         
-        {/* Category */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textPrimary }]}>
-            Kategori
-          </Text>
-          <View style={styles.optionRow}>
-            {renderOptionButton('Tanpa Kategori', '', categoryId?.toString() || '', () => setCategoryId(null))}
-            {taskCategories.map(cat => 
-              renderOptionButton(
-                cat.name, 
-                cat.id.toString(), 
-                categoryId?.toString() || '', 
-                () => setCategoryId(cat.id),
-                cat.color
-              )
-            )}
-          </View>
-        </View>
-        
         {/* Deadline */}
         <DateTimeInput
           label="Deadline"
@@ -322,37 +332,7 @@ export default function NewTaskScreen() {
           onChange={setDeadlineDate}
           mode="datetime"
           placeholder="Pilih tanggal dan waktu deadline"
-          minDate={new Date()}
         />
-        
-        {/* Reminder */}
-        {deadlineDate && (
-          <View style={styles.formGroup}>
-            <View style={styles.switchRow}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Aktifkan Pengingat
-              </Text>
-              <Switch
-                value={enableReminder}
-                onValueChange={setEnableReminder}
-                trackColor={{ false: colors.border, true: colors.primary }}
-              />
-            </View>
-            
-            {enableReminder && (
-              <View style={styles.optionRow}>
-                {REMINDER_PRESETS.slice(0, 6).map(preset => 
-                  renderOptionButton(
-                    preset.label, 
-                    preset.value.toString(), 
-                    reminderOffset.toString(), 
-                    () => setReminderOffset(preset.value)
-                  )
-                )}
-              </View>
-            )}
-          </View>
-        )}
         
         {/* Is Today */}
         <View style={styles.formGroup}>
@@ -373,7 +353,7 @@ export default function NewTaskScreen() {
           </View>
         </View>
         
-        {/* Description */}
+        {/* Description with Markdown */}
         <View style={styles.formGroup}>
           <Text style={[styles.label, { color: colors.textPrimary }]}>
             Deskripsi
@@ -454,7 +434,7 @@ export default function NewTaskScreen() {
         >
           <Ionicons name="checkmark" size={20} color={colors.textInverse} />
           <Text style={[styles.submitButtonText, { color: colors.textInverse }]}>
-            {isSubmitting ? 'Menyimpan...' : 'Simpan Tugas'}
+            {isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
           </Text>
         </TouchableOpacity>
         

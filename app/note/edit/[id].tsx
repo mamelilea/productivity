@@ -1,6 +1,7 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import {
     CategoryPickerModal,
+    LoadingSpinner,
     SimpleMarkdownInput
 } from '@/src/components';
 import * as noteService from '@/src/services/noteService';
@@ -8,7 +9,7 @@ import * as settingsService from '@/src/services/settingsService';
 import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -23,14 +24,16 @@ import {
     View
 } from 'react-native';
 
-export default function NewNoteScreen() {
+export default function EditNoteScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
   const { categories, fetchNotes, fetchCategories } = useAppStore();
   const noteCategories = categories.filter(c => c.type === 'NOTE');
   
+  const [isLoading, setIsLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
@@ -40,9 +43,28 @@ export default function NewNoteScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   
   useEffect(() => {
-    fetchCategories();
+    loadNote();
     checkPassword();
-  }, []);
+  }, [id]);
+  
+  const loadNote = async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const note = await noteService.getNoteById(parseInt(id));
+      if (note) {
+        setTitle(note.title);
+        setContent(note.content);
+        setCategoryId(note.category_id);
+        setIsPrivate(note.is_private);
+      }
+      await fetchCategories();
+    } catch (error) {
+      Alert.alert('Error', 'Gagal memuat catatan');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const checkPassword = async () => {
     const hasPass = await settingsService.hasNotePassword();
@@ -69,7 +91,7 @@ export default function NewNoteScreen() {
     
     setIsSubmitting(true);
     try {
-      await noteService.createNote({
+      await noteService.updateNote(parseInt(id!), {
         title: title.trim(),
         content: content.trim() || undefined,
         category_id: categoryId || undefined,
@@ -79,13 +101,17 @@ export default function NewNoteScreen() {
       await fetchNotes();
       router.back();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Gagal membuat catatan');
+      Alert.alert('Error', error.message || 'Gagal menyimpan catatan');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const selectedCategory = noteCategories.find(c => c.id === categoryId);
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -181,7 +207,7 @@ export default function NewNoteScreen() {
           <SimpleMarkdownInput
             value={content}
             onChangeText={setContent}
-            placeholder="Tulis catatan Anda di sini... (gunakan - untuk list, **text** untuk bold)"
+            placeholder="Tulis catatan Anda di sini..."
             minHeight={200}
           />
         </View>
@@ -198,7 +224,7 @@ export default function NewNoteScreen() {
         >
           <Ionicons name="checkmark" size={20} color={colors.textInverse} />
           <Text style={[styles.submitButtonText, { color: colors.textInverse }]}>
-            {isSubmitting ? 'Menyimpan...' : 'Simpan Catatan'}
+            {isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
           </Text>
         </TouchableOpacity>
         

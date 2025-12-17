@@ -1,6 +1,7 @@
 // Finance Service - CRUD dan report untuk keuangan
 import { getDatabase } from '../db/database';
 import {
+    CategoryReport,
     CreateBudgetInput,
     CreateFinanceCategoryInput,
     CreateTransactionInput,
@@ -165,19 +166,20 @@ export const getMonthlyBudget = async (year: number, month: number): Promise<Mon
 export const upsertMonthlyBudget = async (input: CreateBudgetInput): Promise<number> => {
     const db = await getDatabase();
     const existing = await getMonthlyBudget(input.year, input.month);
+    const dailyBudget = input.daily_budget || 0;
 
     if (existing) {
         await db.runAsync(`
             UPDATE monthly_budgets
-            SET planned_income = ?, planned_expense = ?, updated_at = datetime('now', 'localtime')
+            SET planned_income = ?, planned_expense = ?, daily_budget = ?, updated_at = datetime('now', 'localtime')
             WHERE id = ?
-        `, [input.planned_income, input.planned_expense, existing.id]);
+        `, [input.planned_income, input.planned_expense, dailyBudget, existing.id]);
         return existing.id;
     } else {
         const result = await db.runAsync(`
-            INSERT INTO monthly_budgets (year, month, planned_income, planned_expense)
-            VALUES (?, ?, ?, ?)
-        `, [input.year, input.month, input.planned_income, input.planned_expense]);
+            INSERT INTO monthly_budgets (year, month, planned_income, planned_expense, daily_budget)
+            VALUES (?, ?, ?, ?, ?)
+        `, [input.year, input.month, input.planned_income, input.planned_expense, dailyBudget]);
         return result.lastInsertRowId;
     }
 };
@@ -312,4 +314,206 @@ export const formatCurrency = (amount: number): string => {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
     }).format(amount);
+};
+
+// =============================================
+// FILTER FUNCTIONS
+// =============================================
+
+// Get transactions by type (income/expense only)
+export const getTransactionsByType = async (
+    type: TransactionType,
+    year: number,
+    month: number
+): Promise<Transaction[]> => {
+    const db = await getDatabase();
+    const monthStr = String(month).padStart(2, '0');
+    const startDate = `${year}-${monthStr}-01`;
+    const endDate = `${year}-${monthStr}-31`;
+
+    return db.getAllAsync<Transaction>(`
+        SELECT t.*, c.name as category_name, c.icon as category_icon
+        FROM transactions t
+        LEFT JOIN finance_categories c ON t.category_id = c.id
+        WHERE t.date BETWEEN ? AND ? AND t.type = ?
+        ORDER BY t.date DESC, t.created_at DESC
+    `, [startDate, endDate, type]);
+};
+
+// Get transactions by category
+export const getTransactionsByCategory = async (
+    categoryId: number,
+    year: number,
+    month: number
+): Promise<Transaction[]> => {
+    const db = await getDatabase();
+    const monthStr = String(month).padStart(2, '0');
+    const startDate = `${year}-${monthStr}-01`;
+    const endDate = `${year}-${monthStr}-31`;
+
+    return db.getAllAsync<Transaction>(`
+        SELECT t.*, c.name as category_name, c.icon as category_icon
+        FROM transactions t
+        LEFT JOIN finance_categories c ON t.category_id = c.id
+        WHERE t.date BETWEEN ? AND ? AND t.category_id = ?
+        ORDER BY t.date DESC
+    `, [startDate, endDate, categoryId]);
+};
+
+// Get transactions by week of month (1-5)
+export const getTransactionsByWeek = async (
+    year: number,
+    month: number,
+    week: number
+): Promise<Transaction[]> => {
+    const db = await getDatabase();
+    const monthStr = String(month).padStart(2, '0');
+
+    // Calculate week range
+    const startDay = (week - 1) * 7 + 1;
+    const endDay = Math.min(week * 7, 31);
+    const startDate = `${year}-${monthStr}-${String(startDay).padStart(2, '0')}`;
+    const endDate = `${year}-${monthStr}-${String(endDay).padStart(2, '0')}`;
+
+    return db.getAllAsync<Transaction>(`
+        SELECT t.*, c.name as category_name, c.icon as category_icon
+        FROM transactions t
+        LEFT JOIN finance_categories c ON t.category_id = c.id
+        WHERE t.date BETWEEN ? AND ?
+        ORDER BY t.date DESC
+    `, [startDate, endDate]);
+};
+
+// =============================================
+// CATEGORY BREAKDOWN
+// =============================================
+
+// Get category breakdown for a month
+export const getCategoryBreakdown = async (
+    year: number,
+    month: number,
+    type: TransactionType
+): Promise<CategoryReport[]> => {
+    const db = await getDatabase();
+    const monthStr = String(month).padStart(2, '0');
+    const startDate = `${year}-${monthStr}-01`;
+    const endDate = `${year}-${monthStr}-31`;
+
+    // Get total for the type
+    const totalResult = await db.getFirstAsync<{ total: number }>(`
+        SELECT COALESCE(SUM(amount), 0) as total
+        FROM transactions
+        WHERE date BETWEEN ? AND ? AND type = ?
+    `, [startDate, endDate, type]);
+    const total = totalResult?.total || 0;
+
+    // Get breakdown by category
+    const breakdown = await db.getAllAsync<{
+        category_id: number;
+        category_name: string;
+        category_icon: string;
+        category_color: string;
+        total: number;
+        count: number;
+    }>(`
+        SELECT 
+            c.id as category_id,
+            c.name as category_name,
+            c.icon as category_icon,
+            c.color as category_color,
+            COALESCE(SUM(t.amount), 0) as total,
+            COUNT(t.id) as count
+        FROM transactions t
+        JOIN finance_categories c ON t.category_id = c.id
+        WHERE t.date BETWEEN ? AND ? AND t.type = ?
+        GROUP BY c.id
+        ORDER BY total DESC
+    `, [startDate, endDate, type]);
+
+    return breakdown.map(row => ({
+        category_id: row.category_id,
+        category_name: row.category_name,
+        category_icon: row.category_icon,
+        category_color: row.category_color,
+        total: row.total,
+        percentage: total > 0 ? Math.round((row.total / total) * 100) : 0,
+        transaction_count: row.count,
+    }));
+};
+
+// Get budget recommendation based on current month status
+export const getBudgetRecommendation = async (year: number, month: number): Promise<string | null> => {
+    const report = await getMonthlyReport(year, month);
+    const budget = report.budget;
+
+    const balance = report.balance;
+    const totalExpense = report.total_expense;
+
+    // Deficit scenario
+    if (balance < 0) {
+        const deficit = Math.abs(balance);
+        return `Bulan ini defisit ${formatCurrency(deficit)}. Bulan depan, kurangi pengeluaran minimal ${formatCurrency(deficit)} untuk menyeimbangkan.`;
+    }
+
+    // Over budget expense
+    if (budget && totalExpense > budget.planned_expense) {
+        const over = totalExpense - budget.planned_expense;
+        return `Pengeluaran melebihi budget ${formatCurrency(over)}. Pertimbangkan untuk mengurangi pengeluaran bulan depan.`;
+    }
+
+    // Daily budget check
+    if (budget && budget.daily_budget > 0) {
+        const today = new Date();
+        const dayOfMonth = today.getDate();
+        const expectedSpend = budget.daily_budget * dayOfMonth;
+
+        if (totalExpense > expectedSpend * 1.2) { // 20% over expected
+            const daysLeft = new Date(year, month, 0).getDate() - dayOfMonth;
+            const remaining = budget.planned_expense - totalExpense;
+            const dailyLimit = daysLeft > 0 ? Math.max(0, remaining / daysLeft) : 0;
+            return `Pengeluaran 20% di atas target harian. Sisa ${daysLeft} hari, limit harian: ${formatCurrency(dailyLimit)}.`;
+        }
+    }
+
+    // Good scenario
+    if (balance > 0 && (!budget || totalExpense <= budget.planned_expense)) {
+        return `Keuangan bulan ini sehat! Surplus ${formatCurrency(balance)}.`;
+    }
+
+    return null;
+};
+
+// Check daily budget status
+export const getDailyBudgetStatus = async (): Promise<{
+    budget: number;
+    spent: number;
+    remaining: number;
+    status: 'under' | 'warning' | 'over';
+} | null> => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+
+    const budget = await getMonthlyBudget(year, month);
+    if (!budget || budget.daily_budget <= 0) return null;
+
+    const todayStr = getTodayDate();
+    const todayReport = await getDailyReport(todayStr);
+
+    const spent = todayReport.total_expense;
+    const remaining = budget.daily_budget - spent;
+
+    let status: 'under' | 'warning' | 'over' = 'under';
+    if (spent >= budget.daily_budget) {
+        status = 'over';
+    } else if (spent >= budget.daily_budget * 0.8) {
+        status = 'warning';
+    }
+
+    return {
+        budget: budget.daily_budget,
+        spent,
+        remaining,
+        status,
+    };
 };

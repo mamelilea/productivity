@@ -127,13 +127,14 @@ export const getTaskById = async (id: number): Promise<TaskWithDetails | null> =
 export const createTask = async (input: CreateTaskInput): Promise<number> => {
     const db = await getDatabase();
     const result = await db.runAsync(`
-    INSERT INTO tasks (title, description, category_id, type, priority, deadline, is_today)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (title, description, category_id, type, custom_type, priority, deadline, is_today)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [
         input.title,
         input.description || null,
         input.category_id || null,
         input.type,
+        input.custom_type || null,
         input.priority || 'MEDIUM',
         input.deadline || null,
         input.is_today ? 1 : 0

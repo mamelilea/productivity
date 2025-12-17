@@ -1,7 +1,10 @@
 import { useColorScheme } from '@/components/useColorScheme';
-import { LogbookCategory } from '@/src/models';
-import { LOGBOOK_ICONS } from '@/src/models/logbook';
-import * as logbookService from '@/src/services/logbookService';
+import { FinanceCategory, TransactionType } from '@/src/models';
+import {
+    createFinanceCategory,
+    deleteFinanceCategory,
+    getFinanceCategories
+} from '@/src/services/financeService';
 import { CATEGORY_COLORS, COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -17,33 +20,29 @@ import {
     View
 } from 'react-native';
 
-export default function LogbookScreen() {
+const ICONS = ['💼', '🎁', '📈', '💰', '💵', '🍔', '🚗', '🛒', '🎮', '📄', '💡', '🏠', '💊', '🎓', '✈️'];
+
+export default function FinanceCategoriesScreen() {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
 
-    const [categories, setCategories] = useState<(LogbookCategory & { entryCount: number })[]>([]);
+    const [categories, setCategories] = useState<FinanceCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [addType, setAddType] = useState<TransactionType>('EXPENSE');
     const [newName, setNewName] = useState('');
+    const [newIcon, setNewIcon] = useState('💵');
     const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
-    const [newIcon, setNewIcon] = useState('📝');
     const [isSaving, setIsSaving] = useState(false);
 
     const loadCategories = async () => {
         try {
             setLoading(true);
-            const cats = await logbookService.getAllCategories();
-            // Get entry count for each category
-            const catsWithCount = await Promise.all(
-                cats.map(async (cat) => ({
-                    ...cat,
-                    entryCount: await logbookService.getCategoryEntryCount(cat.id),
-                }))
-            );
-            setCategories(catsWithCount);
+            const cats = await getFinanceCategories();
+            setCategories(cats);
         } catch (error) {
-            console.error('Error loading logbook categories:', error);
+            console.error('Error loading categories:', error);
         } finally {
             setLoading(false);
         }
@@ -55,6 +54,17 @@ export default function LogbookScreen() {
         }, [])
     );
 
+    const incomeCategories = categories.filter(c => c.type === 'INCOME');
+    const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
+
+    const handleOpenAdd = (type: TransactionType) => {
+        setAddType(type);
+        setNewName('');
+        setNewIcon(type === 'INCOME' ? '💰' : '💵');
+        setNewColor(type === 'INCOME' ? '#10B981' : '#EF4444');
+        setShowAddModal(true);
+    };
+
     const handleCreateCategory = async () => {
         if (!newName.trim()) {
             Alert.alert('Error', 'Nama kategori harus diisi');
@@ -63,18 +73,14 @@ export default function LogbookScreen() {
 
         setIsSaving(true);
         try {
-            const id = await logbookService.createCategory({
+            await createFinanceCategory({
                 name: newName.trim(),
-                color: newColor,
+                type: addType,
                 icon: newIcon,
+                color: newColor,
             });
             await loadCategories();
             setShowAddModal(false);
-            setNewName('');
-            setNewColor(CATEGORY_COLORS[0]);
-            setNewIcon('📝');
-            // Navigate to new category
-            router.push(`/logbook/category/${id}` as any);
         } catch (error) {
             Alert.alert('Error', 'Gagal membuat kategori');
         } finally {
@@ -82,17 +88,17 @@ export default function LogbookScreen() {
         }
     };
 
-    const handleDeleteCategory = (cat: LogbookCategory) => {
+    const handleDeleteCategory = (cat: FinanceCategory) => {
         Alert.alert(
             'Hapus Kategori',
-            `Hapus "${cat.name}"? Semua logbook dalam kategori ini juga akan dihapus.`,
+            `Hapus "${cat.name}"?`,
             [
                 { text: 'Batal', style: 'cancel' },
                 {
                     text: 'Hapus',
                     style: 'destructive',
                     onPress: async () => {
-                        await logbookService.deleteCategory(cat.id);
+                        await deleteFinanceCategory(cat.id);
                         await loadCategories();
                     }
                 }
@@ -100,82 +106,77 @@ export default function LogbookScreen() {
         );
     };
 
-    const renderCategory = ({ item }: { item: LogbookCategory & { entryCount: number } }) => (
+    const renderCategory = ({ item }: { item: FinanceCategory }) => (
         <TouchableOpacity
-            style={[styles.categoryCard, { backgroundColor: colors.surface }]}
-            onPress={() => router.push(`/logbook/category/${item.id}` as any)}
+            style={[styles.categoryItem, { backgroundColor: colors.surface }]}
             onLongPress={() => handleDeleteCategory(item)}
-            activeOpacity={0.7}
         >
             <View style={[styles.categoryIcon, { backgroundColor: item.color + '20' }]}>
                 <Text style={styles.categoryIconText}>{item.icon}</Text>
             </View>
-            <View style={styles.categoryContent}>
-                <Text style={[styles.categoryName, { color: colors.textPrimary }]}>
-                    {item.name}
-                </Text>
-                <Text style={[styles.categoryCount, { color: colors.textMuted }]}>
-                    {item.entryCount} entri
-                </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            <Text style={[styles.categoryName, { color: colors.textPrimary }]}>
+                {item.name}
+            </Text>
         </TouchableOpacity>
-    );
-
-    const renderEmptyState = () => (
-        <View style={styles.emptyState}>
-            <Ionicons name="book-outline" size={64} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                Belum Ada Kategori Logbook
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                Buat kategori untuk mulai mencatat aktivitas harianmu
-            </Text>
-            <TouchableOpacity
-                style={[styles.emptyButton, { backgroundColor: colors.primary }]}
-                onPress={() => setShowAddModal(true)}
-            >
-                <Ionicons name="add" size={20} color={colors.textInverse} />
-                <Text style={[styles.emptyButtonText, { color: colors.textInverse }]}>
-                    Buat Kategori Pertama
-                </Text>
-            </TouchableOpacity>
-        </View>
     );
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* Header Info */}
-            <View style={[styles.headerInfo, { backgroundColor: colors.surface }]}>
-                <Ionicons name="book" size={24} color={colors.primary} />
-                <View style={styles.headerTextContainer}>
-                    <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-                        Logbook Harian
+            {/* Income Section */}
+            <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: colors.success }]}>
+                        💰 Kategori Pemasukan
                     </Text>
-                    <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-                        Pilih kategori untuk mulai mencatat
-                    </Text>
+                    <TouchableOpacity onPress={() => handleOpenAdd('INCOME')}>
+                        <Ionicons name="add-circle" size={24} color={colors.success} />
+                    </TouchableOpacity>
                 </View>
+                
+                <FlatList
+                    data={incomeCategories}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={renderCategory}
+                    numColumns={3}
+                    columnWrapperStyle={styles.categoryRow}
+                    scrollEnabled={false}
+                    ListEmptyComponent={
+                        <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                            Belum ada kategori
+                        </Text>
+                    }
+                />
             </View>
 
-            {/* Categories List */}
-            <FlatList
-                data={categories}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderCategory}
-                contentContainerStyle={categories.length === 0 ? styles.emptyContainer : styles.listContainer}
-                ListEmptyComponent={!loading ? renderEmptyState : null}
-                showsVerticalScrollIndicator={false}
-            />
+            {/* Expense Section */}
+            <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: colors.danger }]}>
+                        💸 Kategori Pengeluaran
+                    </Text>
+                    <TouchableOpacity onPress={() => handleOpenAdd('EXPENSE')}>
+                        <Ionicons name="add-circle" size={24} color={colors.danger} />
+                    </TouchableOpacity>
+                </View>
+                
+                <FlatList
+                    data={expenseCategories}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={renderCategory}
+                    numColumns={3}
+                    columnWrapperStyle={styles.categoryRow}
+                    scrollEnabled={false}
+                    ListEmptyComponent={
+                        <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                            Belum ada kategori
+                        </Text>
+                    }
+                />
+            </View>
 
-            {/* FAB */}
-            <TouchableOpacity
-                style={[styles.fab, { backgroundColor: colors.primary }]}
-                onPress={() => setShowAddModal(true)}
-                activeOpacity={0.8}
-            >
-                <Ionicons name="add" size={28} color={colors.textInverse} />
-            </TouchableOpacity>
+            <Text style={[styles.hint, { color: colors.textMuted }]}>
+                Tekan lama pada kategori untuk menghapus
+            </Text>
 
             {/* Add Category Modal */}
             <Modal
@@ -188,7 +189,7 @@ export default function LogbookScreen() {
                     <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                                Kategori Baru
+                                Kategori {addType === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'} Baru
                             </Text>
                             <TouchableOpacity onPress={() => setShowAddModal(false)}>
                                 <Ionicons name="close" size={24} color={colors.textMuted} />
@@ -201,7 +202,7 @@ export default function LogbookScreen() {
                                 color: colors.textPrimary,
                                 borderColor: colors.border,
                             }]}
-                            placeholder="Nama kategori (misal: Kuliah, Kerjaan)"
+                            placeholder="Nama kategori"
                             placeholderTextColor={colors.textMuted}
                             value={newName}
                             onChangeText={setNewName}
@@ -211,7 +212,7 @@ export default function LogbookScreen() {
                             Pilih Icon:
                         </Text>
                         <View style={styles.iconRow}>
-                            {LOGBOOK_ICONS.map((icon) => (
+                            {ICONS.map((icon) => (
                                 <TouchableOpacity
                                     key={icon}
                                     style={[
@@ -248,12 +249,14 @@ export default function LogbookScreen() {
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                            style={[styles.saveButton, { 
+                                backgroundColor: addType === 'INCOME' ? colors.success : colors.danger 
+                            }]}
                             onPress={handleCreateCategory}
                             disabled={isSaving}
                         >
-                            <Text style={[styles.saveButtonText, { color: colors.textInverse }]}>
-                                {isSaving ? 'Menyimpan...' : 'Buat Kategori'}
+                            <Text style={[styles.saveButtonText, { color: '#FFF' }]}>
+                                {isSaving ? 'Menyimpan...' : 'Simpan Kategori'}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -266,107 +269,57 @@ export default function LogbookScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        padding: 16,
     },
-    headerInfo: {
+    section: {
+        marginBottom: 24,
+    },
+    sectionHeader: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        marginHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 8,
-        borderRadius: 12,
-        gap: 12,
-    },
-    headerTextContainer: {
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    listContainer: {
-        padding: 16,
-        paddingBottom: 100,
-    },
-    categoryCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
         marginBottom: 12,
     },
-    categoryIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    categoryIconText: {
-        fontSize: 24,
-    },
-    categoryContent: {
-        flex: 1,
-        marginLeft: 14,
-    },
-    categoryName: {
+    sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
     },
-    categoryCount: {
-        fontSize: 13,
-        marginTop: 2,
+    categoryRow: {
+        justifyContent: 'flex-start',
+        gap: 10,
     },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-    },
-    emptyState: {
+    categoryItem: {
+        width: '31%',
+        padding: 12,
+        borderRadius: 12,
         alignItems: 'center',
-        padding: 32,
+        marginBottom: 10,
     },
-    emptyTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        marginTop: 16,
+    categoryIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 6,
     },
-    emptySubtitle: {
-        fontSize: 14,
+    categoryIconText: {
+        fontSize: 22,
+    },
+    categoryName: {
+        fontSize: 12,
+        fontWeight: '500',
         textAlign: 'center',
-        marginTop: 8,
-        marginHorizontal: 32,
     },
-    emptyButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 24,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 8,
-        gap: 8,
+    emptyText: {
+        fontSize: 13,
+        textAlign: 'center',
+        padding: 16,
     },
-    emptyButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    fab: {
-        position: 'absolute',
-        bottom: 24,
-        right: 24,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+    hint: {
+        fontSize: 12,
+        textAlign: 'center',
+        marginTop: 'auto',
     },
     modalOverlay: {
         flex: 1,
@@ -385,7 +338,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     modalTitle: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '600',
     },
     input: {

@@ -1,8 +1,11 @@
 import { useColorScheme } from '@/components/useColorScheme';
+import { PasswordPrompt } from '@/src/components';
 import { Transaction, TransactionType } from '@/src/models';
+import * as authService from '@/src/services/authService';
 import {
     formatCurrency,
     getAllTransactions,
+    getDailyBudgetStatus,
     getTodaySummary,
     getTotalBalance,
     initDefaultFinanceCategories
@@ -12,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
+    Alert,
     FlatList,
     StyleSheet,
     Text,
@@ -24,27 +28,87 @@ export default function FinanceScreen() {
     const colorScheme = useColorScheme();
     const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
 
+    // Auth state
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
+    const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+    const [biometricName, setBiometricName] = useState('Biometric');
+    
+    // Data state
     const [balance, setBalance] = useState(0);
     const [todayIncome, setTodayIncome] = useState(0);
     const [todayExpense, setTodayExpense] = useState(0);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dailyBudget, setDailyBudget] = useState<{
+        budget: number;
+        spent: number;
+        remaining: number;
+        status: 'under' | 'warning' | 'over';
+    } | null>(null);
+
+    const checkAuth = async () => {
+        const preferredMethod = await authService.getPreferredAuthMethod();
+        
+        if (preferredMethod === 'none') {
+            // No auth required, prompt to setup
+            setIsAuthenticated(true);
+            return;
+        }
+        
+        if (preferredMethod === 'biometric') {
+            const bioName = await authService.getBiometricType();
+            setBiometricName(bioName);
+            await authenticateWithBiometric();
+        } else {
+            setShowPasswordPrompt(true);
+        }
+    };
+
+    const authenticateWithBiometric = async () => {
+        setIsAuthenticating(true);
+        const result = await authService.authenticateWithBiometric();
+        setIsAuthenticating(false);
+        
+        if (result.success) {
+            setIsAuthenticated(true);
+        } else if (result.error !== 'Dibatalkan') {
+            // Try password fallback
+            const hasPass = await authService.hasFinancePassword();
+            if (hasPass) {
+                setShowPasswordPrompt(true);
+            } else {
+                Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
+            }
+        }
+    };
+
+    const handlePasswordSubmit = async (password: string): Promise<boolean> => {
+        const valid = await authService.verifyFinancePassword(password);
+        if (valid) {
+            setIsAuthenticated(true);
+            return true;
+        }
+        return false;
+    };
 
     const loadData = async () => {
         try {
             setLoading(true);
             await initDefaultFinanceCategories();
             
-            const [bal, today, txns] = await Promise.all([
+            const [bal, today, txns, budgetStatus] = await Promise.all([
                 getTotalBalance(),
                 getTodaySummary(),
-                getAllTransactions(20)
+                getAllTransactions(20),
+                getDailyBudgetStatus()
             ]);
 
             setBalance(bal);
             setTodayIncome(today.income);
             setTodayExpense(today.expense);
             setTransactions(txns);
+            setDailyBudget(budgetStatus);
         } catch (error) {
             console.error('Error loading finance data:', error);
         } finally {
@@ -54,9 +118,54 @@ export default function FinanceScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            loadData();
-        }, [])
+            if (!isAuthenticated) {
+                checkAuth();
+            } else {
+                loadData();
+            }
+        }, [isAuthenticated])
     );
+
+    // Lock Screen
+    if (!isAuthenticated) {
+        return (
+            <View style={[styles.lockContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.lockCard, { backgroundColor: colors.surface }]}>
+                    <View style={[styles.lockIconContainer, { backgroundColor: colors.primary + '20' }]}>
+                        <Ionicons name="lock-closed" size={48} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.lockTitle, { color: colors.textPrimary }]}>
+                        Keuangan Terkunci
+                    </Text>
+                    <Text style={[styles.lockSubtitle, { color: colors.textMuted }]}>
+                        Verifikasi identitas untuk mengakses data keuangan
+                    </Text>
+                    
+                    <TouchableOpacity
+                        style={[styles.unlockButton, { backgroundColor: colors.primary }]}
+                        onPress={checkAuth}
+                        disabled={isAuthenticating}
+                    >
+                        <Ionicons 
+                            name="finger-print" 
+                            size={22} 
+                            color={colors.textInverse} 
+                        />
+                        <Text style={[styles.unlockButtonText, { color: colors.textInverse }]}>
+                            {isAuthenticating ? 'Memverifikasi...' : `Buka dengan ${biometricName}`}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+                
+                <PasswordPrompt
+                    visible={showPasswordPrompt}
+                    onClose={() => setShowPasswordPrompt(false)}
+                    onSubmit={handlePasswordSubmit}
+                    title="Masukkan Sandi Keuangan"
+                />
+            </View>
+        );
+    }
 
     const getTransactionIcon = (type: TransactionType, categoryIcon?: string) => {
         if (categoryIcon) return categoryIcon;
@@ -128,6 +237,29 @@ export default function FinanceScreen() {
                 </View>
             </View>
 
+            {/* Daily Budget Warning */}
+            {dailyBudget && dailyBudget.status !== 'under' && (
+                <View style={[
+                    styles.budgetWarning,
+                    { backgroundColor: dailyBudget.status === 'over' ? colors.danger + '15' : colors.warning + '15' }
+                ]}>
+                    <Ionicons 
+                        name={dailyBudget.status === 'over' ? 'warning' : 'alert-circle'} 
+                        size={20} 
+                        color={dailyBudget.status === 'over' ? colors.danger : colors.warning} 
+                    />
+                    <Text style={[
+                        styles.budgetWarningText,
+                        { color: dailyBudget.status === 'over' ? colors.danger : colors.warning }
+                    ]}>
+                        {dailyBudget.status === 'over' 
+                            ? `Budget harian terlampaui ${formatCurrency(Math.abs(dailyBudget.remaining))}!`
+                            : `Mendekati limit: sisa ${formatCurrency(dailyBudget.remaining)}`
+                        }
+                    </Text>
+                </View>
+            )}
+
             {/* Quick Actions */}
             <View style={styles.quickActions}>
                 <TouchableOpacity
@@ -158,6 +290,11 @@ export default function FinanceScreen() {
                 <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                     Transaksi Terbaru
                 </Text>
+                <TouchableOpacity onPress={() => router.push('/finance/categories' as any)}>
+                    <Text style={[styles.manageLink, { color: colors.primary }]}>
+                        Kelola Kategori
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -175,6 +312,48 @@ export default function FinanceScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+    },
+    lockContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    lockCard: {
+        width: '100%',
+        padding: 32,
+        borderRadius: 20,
+        alignItems: 'center',
+    },
+    lockIconContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    lockTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    lockSubtitle: {
+        fontSize: 14,
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    unlockButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 24,
+        paddingVertical: 14,
+        borderRadius: 12,
+    },
+    unlockButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
     },
     balanceCard: {
         margin: 16,
@@ -216,6 +395,20 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 2,
     },
+    budgetWarning: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 12,
+        borderRadius: 10,
+    },
+    budgetWarningText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '500',
+    },
     quickActions: {
         flexDirection: 'row',
         paddingHorizontal: 16,
@@ -237,12 +430,19 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 16,
         marginBottom: 8,
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
+    },
+    manageLink: {
+        fontSize: 13,
+        fontWeight: '500',
     },
     listContainer: {
         paddingHorizontal: 16,

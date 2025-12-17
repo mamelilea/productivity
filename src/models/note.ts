@@ -4,6 +4,7 @@ export interface Note {
     title: string;
     content: string;
     category_id: number | null;
+    is_private: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -17,10 +18,12 @@ export interface CreateNoteInput {
     title: string;
     content?: string;
     category_id?: number;
+    is_private?: boolean;
 }
 
 export interface UpdateNoteInput {
     title?: string;
     content?: string;
     category_id?: number;
+    is_private?: boolean;
 }

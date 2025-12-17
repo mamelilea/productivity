@@ -1,15 +1,16 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import { LoadingSpinner } from '@/src/components';
-import { Schedule } from '@/src/models';
+import { Schedule, ScheduleLink } from '@/src/models';
 import * as scheduleService from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
-import { COLORS, DARK_COLORS } from '@/src/utils/constants';
+import { COLORS, DARK_COLORS, RECURRENCE_TYPE_OPTIONS } from '@/src/utils/constants';
 import {
     formatTanggalWaktu,
     getScheduleTypeLabel,
     NAMA_HARI
 } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -29,6 +30,7 @@ export default function ScheduleDetailScreen() {
   
   const { fetchSchedules } = useAppStore();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [links, setLinks] = useState<ScheduleLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const loadSchedule = async () => {
@@ -37,6 +39,10 @@ export default function ScheduleDetailScreen() {
     try {
       const data = await scheduleService.getScheduleById(parseInt(id));
       setSchedule(data);
+      if (data) {
+        const scheduleLinks = await scheduleService.getScheduleLinks(parseInt(id));
+        setLinks(scheduleLinks);
+      }
     } catch (error) {
       Alert.alert('Error', 'Gagal memuat jadwal');
     } finally {
@@ -70,6 +76,51 @@ export default function ScheduleDetailScreen() {
       ]
     );
   };
+
+  const openLink = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Tidak dapat membuka link ini');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Gagal membuka link');
+    }
+  };
+
+  const getRecurrenceText = () => {
+    if (!schedule) return '';
+    
+    if (schedule.recurrence_type === 'none') {
+      return 'Tidak Berulang';
+    }
+    
+    const option = RECURRENCE_TYPE_OPTIONS.find(o => o.value === schedule.recurrence_type);
+    let text = option?.label || 'Berulang';
+    
+    if (schedule.recurrence_interval > 1) {
+      const unitLabel = schedule.recurrence_type === 'daily' ? 'hari' 
+        : schedule.recurrence_type === 'weekly' || schedule.recurrence_type === 'custom' ? 'minggu'
+        : schedule.recurrence_type === 'monthly' ? 'bulan' : 'tahun';
+      text = `Setiap ${schedule.recurrence_interval} ${unitLabel}`;
+    }
+    
+    if ((schedule.recurrence_type === 'weekly' || schedule.recurrence_type === 'custom') 
+        && schedule.recurrence_days && schedule.recurrence_days.length > 0) {
+      const dayLabels = schedule.recurrence_days.map(d => NAMA_HARI[d]).join(', ');
+      text += ` (${dayLabels})`;
+    }
+    
+    if (schedule.recurrence_end_type === 'date' && schedule.recurrence_end_date) {
+      text += ` sampai ${new Date(schedule.recurrence_end_date).toLocaleDateString('id-ID')}`;
+    } else if (schedule.recurrence_end_type === 'count' && schedule.recurrence_end_count) {
+      text += ` (${schedule.recurrence_end_count} kali)`;
+    }
+    
+    return text;
+  };
   
   if (isLoading) {
     return <LoadingSpinner />;
@@ -94,6 +145,10 @@ export default function ScheduleDetailScreen() {
     }
   };
 
+  const displayType = schedule.type === 'CUSTOM' && schedule.custom_type 
+    ? schedule.custom_type 
+    : getScheduleTypeLabel(schedule.type);
+
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -104,34 +159,47 @@ export default function ScheduleDetailScreen() {
         <Text style={styles.typeIcon}>{getTypeIcon()}</Text>
         <Text style={styles.scheduleTitle}>{schedule.title}</Text>
         <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>
-            {getScheduleTypeLabel(schedule.type)}
-          </Text>
+          <Text style={styles.headerBadgeText}>{displayType}</Text>
         </View>
       </View>
       
       {/* Details */}
       <View style={[styles.detailsCard, { backgroundColor: colors.surface }]}>
-        {/* Recurring info */}
-        {schedule.is_recurring && schedule.day_of_week !== null && (
+        {/* Description */}
+        {schedule.description && (
           <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="repeat" size={20} color={colors.primary} />
+            <View style={[styles.detailIcon, { backgroundColor: colors.surfaceVariant }]}>
+              <Ionicons name="document-text" size={20} color={colors.primary} />
             </View>
             <View style={styles.detailContent}>
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                Hari
+                Deskripsi
               </Text>
               <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
-                Setiap {NAMA_HARI[schedule.day_of_week]}
+                {schedule.description}
               </Text>
             </View>
           </View>
         )}
         
+        {/* Recurrence info */}
+        <View style={styles.detailRow}>
+          <View style={[styles.detailIcon, { backgroundColor: colors.surfaceVariant }]}>
+            <Ionicons name="repeat" size={20} color={colors.primary} />
+          </View>
+          <View style={styles.detailContent}>
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+              Pengulangan
+            </Text>
+            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+              {getRecurrenceText()}
+            </Text>
+          </View>
+        </View>
+        
         {/* Time */}
         <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
+          <View style={[styles.detailIcon, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="time" size={20} color={colors.primary} />
           </View>
           <View style={styles.detailContent}>
@@ -139,8 +207,8 @@ export default function ScheduleDetailScreen() {
               Waktu
             </Text>
             <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
-              {schedule.is_recurring 
-                ? `${schedule.start_time}${schedule.end_time ? ` - ${schedule.end_time}` : ''}`
+              {schedule.recurrence_type !== 'none'
+                ? `${schedule.start_time.split('T')[1]?.substring(0, 5) || ''}${schedule.end_time ? ` - ${schedule.end_time.split('T')[1]?.substring(0, 5) || ''}` : ''}`
                 : formatTanggalWaktu(schedule.start_time)
               }
             </Text>
@@ -150,7 +218,7 @@ export default function ScheduleDetailScreen() {
         {/* Location */}
         {schedule.location && (
           <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
+            <View style={[styles.detailIcon, { backgroundColor: colors.surfaceVariant }]}>
               <Ionicons name="location" size={20} color={colors.primary} />
             </View>
             <View style={styles.detailContent}>
@@ -165,8 +233,8 @@ export default function ScheduleDetailScreen() {
         )}
         
         {/* Created date */}
-        <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
+        <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+          <View style={[styles.detailIcon, { backgroundColor: colors.surfaceVariant }]}>
             <Ionicons name="calendar-outline" size={20} color={colors.textMuted} />
           </View>
           <View style={styles.detailContent}>
@@ -179,17 +247,58 @@ export default function ScheduleDetailScreen() {
           </View>
         </View>
       </View>
+
+      {/* Links Section */}
+      {links.length > 0 && (
+        <View style={[styles.linksCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            <Ionicons name="link" size={16} color={colors.primary} /> Link
+          </Text>
+          {links.map((link) => (
+            <TouchableOpacity
+              key={link.id}
+              style={[styles.linkItem, { backgroundColor: colors.surfaceVariant }]}
+              onPress={() => openLink(link.url)}
+            >
+              <Ionicons name="open-outline" size={18} color={colors.primary} />
+              <View style={styles.linkContent}>
+                <Text style={[styles.linkLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {link.label || link.url}
+                </Text>
+                {link.label && (
+                  <Text style={[styles.linkUrl, { color: colors.textMuted }]} numberOfLines={1}>
+                    {link.url}
+                  </Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
       
-      {/* Delete Button */}
-      <TouchableOpacity
-        style={[styles.deleteButton, { borderColor: colors.danger }]}
-        onPress={handleDelete}
-      >
-        <Ionicons name="trash-outline" size={20} color={colors.danger} />
-        <Text style={[styles.deleteButtonText, { color: colors.danger }]}>
-          Hapus Jadwal
-        </Text>
-      </TouchableOpacity>
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.editButton, { backgroundColor: colors.primary }]}
+          onPress={() => router.push(`/schedule/edit/${id}`)}
+        >
+          <Ionicons name="create-outline" size={20} color={colors.textInverse} />
+          <Text style={[styles.editButtonText, { color: colors.textInverse }]}>
+            Edit Jadwal
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.deleteButton, { borderColor: colors.danger }]}
+          onPress={handleDelete}
+        >
+          <Ionicons name="trash-outline" size={20} color={colors.danger} />
+          <Text style={[styles.deleteButtonText, { color: colors.danger }]}>
+            Hapus
+          </Text>
+        </TouchableOpacity>
+      </View>
       
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -238,7 +347,7 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: '#E5E7EB',
@@ -247,7 +356,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -263,19 +371,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  linksCard: {
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    borderRadius: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  linkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    gap: 10,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  linkUrl: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 16,
+    padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
+    gap: 6,
   },
   deleteButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });

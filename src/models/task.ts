@@ -1,5 +1,5 @@
 // Task entity types
-export type TaskType = 'KULIAH' | 'NON_KULIAH';
+export type TaskType = 'KULIAH' | 'NON_KULIAH' | 'CUSTOM';
 export type TaskStatus = 'TODO' | 'PROGRESS' | 'DONE';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
 export type AssignmentType = 'INDIVIDU' | 'KELOMPOK';
@@ -10,6 +10,7 @@ export interface Task {
     description: string | null;
     category_id: number | null;
     type: TaskType;
+    custom_type: string | null;
     status: TaskStatus;
     priority: Priority;
     deadline: string | null; // ISO date string
@@ -48,6 +49,7 @@ export interface CreateTaskInput {
     description?: string;
     category_id?: number;
     type: TaskType;
+    custom_type?: string;
     priority?: Priority;
     deadline?: string;
     is_today?: boolean;
