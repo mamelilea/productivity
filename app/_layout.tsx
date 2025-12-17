@@ -136,7 +136,28 @@ function RootLayoutNav() {
         <Stack.Screen 
           name="finance/[id]" 
           options={{ 
-            title: 'Detail Transaksi',
+            headerShown: false,
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="finance/categories" 
+          options={{ 
+            title: 'Kelola Kategori',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="logbook/category/[id]" 
+          options={{ 
+            headerShown: false,
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="calendar/[date]" 
+          options={{ 
+            title: 'Detail Hari',
             presentation: 'card' 
           }} 
         />

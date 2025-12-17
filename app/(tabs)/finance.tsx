@@ -1,11 +1,12 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import { PasswordPrompt } from '@/src/components';
-import { Transaction, TransactionType } from '@/src/models';
+import { FinanceCategory, Transaction, TransactionType } from '@/src/models';
 import * as authService from '@/src/services/authService';
 import {
     formatCurrency,
     getAllTransactions,
     getDailyBudgetStatus,
+    getFinanceCategories,
     getTodaySummary,
     getTotalBalance,
     initDefaultFinanceCategories
@@ -17,6 +18,7 @@ import React, { useCallback, useState } from 'react';
 import {
     Alert,
     FlatList,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -46,6 +48,11 @@ export default function FinanceScreen() {
         remaining: number;
         status: 'under' | 'warning' | 'over';
     } | null>(null);
+    
+    // Filter state
+    const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
+    const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null);
+    const [categories, setCategories] = useState<FinanceCategory[]>([]);
 
     const checkAuth = async () => {
         const preferredMethod = await authService.getPreferredAuthMethod();
@@ -97,11 +104,12 @@ export default function FinanceScreen() {
             setLoading(true);
             await initDefaultFinanceCategories();
             
-            const [bal, today, txns, budgetStatus] = await Promise.all([
+            const [bal, today, txns, budgetStatus, cats] = await Promise.all([
                 getTotalBalance(),
                 getTodaySummary(),
-                getAllTransactions(20),
-                getDailyBudgetStatus()
+                getAllTransactions(50),
+                getDailyBudgetStatus(),
+                getFinanceCategories()
             ]);
 
             setBalance(bal);
@@ -109,12 +117,22 @@ export default function FinanceScreen() {
             setTodayExpense(today.expense);
             setTransactions(txns);
             setDailyBudget(budgetStatus);
+            setCategories(cats);
         } catch (error) {
             console.error('Error loading finance data:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    // Filter transactions
+    const filteredTransactions = transactions.filter(t => {
+        // Filter by type
+        if (filterType !== 'ALL' && t.type !== filterType) return false;
+        // Filter by category
+        if (filterCategoryId !== null && t.category_id !== filterCategoryId) return false;
+        return true;
+    });
 
     useFocusEffect(
         useCallback(() => {
@@ -297,11 +315,99 @@ export default function FinanceScreen() {
                 </TouchableOpacity>
             </View>
 
+            {/* Filter Chips */}
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.filterContainer}
+                contentContainerStyle={styles.filterContent}
+            >
+                <TouchableOpacity
+                    style={[
+                        styles.filterChip,
+                        { 
+                            backgroundColor: filterType === 'ALL' && filterCategoryId === null
+                                ? colors.primary 
+                                : colors.surfaceVariant 
+                        }
+                    ]}
+                    onPress={() => { setFilterType('ALL'); setFilterCategoryId(null); }}
+                >
+                    <Text style={[
+                        styles.filterChipText,
+                        { color: filterType === 'ALL' && filterCategoryId === null ? '#FFFFFF' : colors.textSecondary }
+                    ]}>
+                        Semua
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.filterChip,
+                        { 
+                            backgroundColor: filterType === 'INCOME' && filterCategoryId === null
+                                ? '#10B981' 
+                                : colors.surfaceVariant 
+                        }
+                    ]}
+                    onPress={() => { setFilterType('INCOME'); setFilterCategoryId(null); }}
+                >
+                    <Text style={[
+                        styles.filterChipText,
+                        { color: filterType === 'INCOME' && filterCategoryId === null ? '#FFFFFF' : colors.textSecondary }
+                    ]}>
+                        💰 Pemasukan
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.filterChip,
+                        { 
+                            backgroundColor: filterType === 'EXPENSE' && filterCategoryId === null
+                                ? '#EF4444' 
+                                : colors.surfaceVariant 
+                        }
+                    ]}
+                    onPress={() => { setFilterType('EXPENSE'); setFilterCategoryId(null); }}
+                >
+                    <Text style={[
+                        styles.filterChipText,
+                        { color: filterType === 'EXPENSE' && filterCategoryId === null ? '#FFFFFF' : colors.textSecondary }
+                    ]}>
+                        💸 Pengeluaran
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Category filters */}
+                {categories.map(cat => (
+                    <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                            styles.filterChip,
+                            { 
+                                backgroundColor: filterCategoryId === cat.id
+                                    ? cat.color 
+                                    : colors.surfaceVariant 
+                            }
+                        ]}
+                        onPress={() => { setFilterType('ALL'); setFilterCategoryId(cat.id); }}
+                    >
+                        <Text style={[
+                            styles.filterChipText,
+                            { color: filterCategoryId === cat.id ? '#FFFFFF' : colors.textSecondary }
+                        ]}>
+                            {cat.icon} {cat.name}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+
             <FlatList
-                data={transactions}
+                data={filteredTransactions}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={renderTransaction}
-                contentContainerStyle={transactions.length === 0 ? styles.emptyContainer : styles.listContainer}
+                contentContainerStyle={filteredTransactions.length === 0 ? styles.emptyContainer : styles.listContainer}
                 ListEmptyComponent={!loading ? renderEmptyState : null}
                 showsVerticalScrollIndicator={false}
             />
@@ -441,6 +547,22 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     manageLink: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    filterContainer: {
+        marginBottom: 12,
+    },
+    filterContent: {
+        paddingHorizontal: 16,
+        gap: 8,
+    },
+    filterChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    filterChipText: {
         fontSize: 13,
         fontWeight: '500',
     },

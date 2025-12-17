@@ -1,7 +1,10 @@
 import { useColorScheme } from '@/components/useColorScheme';
 import { MonthlyReport } from '@/src/models';
 import {
+    BudgetRecommendation,
     formatCurrency,
+    getAIBudgetRecommendations,
+    getDailyBudgetStatus,
     getMonthlyReport,
     upsertMonthlyBudget
 } from '@/src/services/financeService';
@@ -36,7 +39,17 @@ export default function FinanceReportScreen() {
     // Budget inputs
     const [plannedIncome, setPlannedIncome] = useState('');
     const [plannedExpense, setPlannedExpense] = useState('');
+    const [dailyBudgetInput, setDailyBudgetInput] = useState('');
     const [showBudgetForm, setShowBudgetForm] = useState(false);
+    
+    // AI Recommendations
+    const [recommendations, setRecommendations] = useState<BudgetRecommendation[]>([]);
+    const [dailyBudgetStatus, setDailyBudgetStatus] = useState<{
+        budget: number;
+        spent: number;
+        remaining: number;
+        status: 'under' | 'warning' | 'over';
+    } | null>(null);
 
     useEffect(() => {
         loadReport();
@@ -45,16 +58,24 @@ export default function FinanceReportScreen() {
     const loadReport = async () => {
         try {
             setLoading(true);
-            const data = await getMonthlyReport(year, month);
+            const [data, recs, dailyStatus] = await Promise.all([
+                getMonthlyReport(year, month),
+                getAIBudgetRecommendations(year, month),
+                getDailyBudgetStatus()
+            ]);
             setReport(data);
+            setRecommendations(recs);
+            setDailyBudgetStatus(dailyStatus);
 
             // Set budget inputs if exists
             if (data.budget) {
                 setPlannedIncome(data.budget.planned_income.toString());
                 setPlannedExpense(data.budget.planned_expense.toString());
+                setDailyBudgetInput(data.budget.daily_budget?.toString() || '');
             } else {
                 setPlannedIncome('');
                 setPlannedExpense('');
+                setDailyBudgetInput('');
             }
         } catch (error) {
             console.error('Error loading report:', error);
@@ -84,13 +105,15 @@ export default function FinanceReportScreen() {
     const handleSaveBudget = async () => {
         const incomeVal = parseInt(plannedIncome.replace(/[^0-9]/g, ''), 10) || 0;
         const expenseVal = parseInt(plannedExpense.replace(/[^0-9]/g, ''), 10) || 0;
+        const dailyVal = parseInt(dailyBudgetInput.replace(/[^0-9]/g, ''), 10) || 0;
 
         try {
             await upsertMonthlyBudget({
                 year,
                 month,
                 planned_income: incomeVal,
-                planned_expense: expenseVal
+                planned_expense: expenseVal,
+                daily_budget: dailyVal
             });
             setShowBudgetForm(false);
             loadReport();
@@ -219,6 +242,22 @@ export default function FinanceReportScreen() {
                                 />
                             </View>
                         </View>
+                        <View style={styles.budgetInputRow}>
+                            <Text style={[styles.budgetInputLabel, { color: colors.textSecondary }]}>
+                                Budget Harian
+                            </Text>
+                            <View style={[styles.budgetInputContainer, { backgroundColor: colors.surfaceVariant }]}>
+                                <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>Rp</Text>
+                                <TextInput
+                                    style={[styles.budgetInput, { color: colors.textPrimary }]}
+                                    placeholder="0"
+                                    placeholderTextColor={colors.textMuted}
+                                    value={formatBudgetInput(dailyBudgetInput)}
+                                    onChangeText={setDailyBudgetInput}
+                                    keyboardType="numeric"
+                                />
+                            </View>
+                        </View>
                         <TouchableOpacity
                             style={[styles.saveBudgetBtn, { backgroundColor: colors.primary }]}
                             onPress={handleSaveBudget}
@@ -277,6 +316,87 @@ export default function FinanceReportScreen() {
                     </Text>
                 )}
             </View>
+
+            {/* Daily Budget Status */}
+            {dailyBudgetStatus && (
+                <View style={[styles.dailyBudgetSection, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                        ⏰ Budget Hari Ini
+                    </Text>
+                    <View style={styles.dailyBudgetStats}>
+                        <View style={styles.dailyBudgetStat}>
+                            <Text style={[styles.dailyBudgetLabel, { color: colors.textMuted }]}>Budget</Text>
+                            <Text style={[styles.dailyBudgetValue, { color: colors.textPrimary }]}>
+                                {formatCurrency(dailyBudgetStatus.budget)}
+                            </Text>
+                        </View>
+                        <View style={styles.dailyBudgetStat}>
+                            <Text style={[styles.dailyBudgetLabel, { color: colors.textMuted }]}>Terpakai</Text>
+                            <Text style={[styles.dailyBudgetValue, { color: '#EF4444' }]}>
+                                {formatCurrency(dailyBudgetStatus.spent)}
+                            </Text>
+                        </View>
+                        <View style={styles.dailyBudgetStat}>
+                            <Text style={[styles.dailyBudgetLabel, { color: colors.textMuted }]}>Sisa</Text>
+                            <Text style={[
+                                styles.dailyBudgetValue, 
+                                { color: dailyBudgetStatus.remaining >= 0 ? '#10B981' : '#EF4444' }
+                            ]}>
+                                {formatCurrency(dailyBudgetStatus.remaining)}
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={[styles.progressBar, { backgroundColor: colors.surfaceVariant, marginTop: 12 }]}>
+                        <View
+                            style={[
+                                styles.progressFill,
+                                {
+                                    width: `${Math.min(100, (dailyBudgetStatus.spent / dailyBudgetStatus.budget) * 100)}%`,
+                                    backgroundColor: dailyBudgetStatus.status === 'over' ? '#EF4444' : 
+                                                     dailyBudgetStatus.status === 'warning' ? '#F59E0B' : '#10B981'
+                                }
+                            ]}
+                        />
+                    </View>
+                </View>
+            )}
+
+            {/* AI Recommendations */}
+            {recommendations.length > 0 && (
+                <View style={[styles.recommendationsSection, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                        🤖 Rekomendasi AI
+                    </Text>
+                    {recommendations.map((rec, index) => (
+                        <View 
+                            key={index} 
+                            style={[
+                                styles.recommendationCard,
+                                { 
+                                    backgroundColor: rec.type === 'success' ? '#10B98115' :
+                                                     rec.type === 'warning' ? '#F59E0B15' :
+                                                     rec.type === 'danger' ? '#EF444415' : '#6366F115',
+                                    borderLeftColor: rec.type === 'success' ? '#10B981' :
+                                                     rec.type === 'warning' ? '#F59E0B' :
+                                                     rec.type === 'danger' ? '#EF4444' : '#6366F1'
+                                }
+                            ]}
+                        >
+                            <Text style={[styles.recommendationTitle, { color: colors.textPrimary }]}>
+                                {rec.title}
+                            </Text>
+                            <Text style={[styles.recommendationMessage, { color: colors.textSecondary }]}>
+                                {rec.message}
+                            </Text>
+                            {rec.actionTip && (
+                                <Text style={[styles.recommendationTip, { color: colors.primary }]}>
+                                    💡 {rec.actionTip}
+                                </Text>
+                            )}
+                        </View>
+                    ))}
+                </View>
+            )}
 
             {/* Daily Breakdown */}
             {report.daily_breakdown.length > 0 && (
@@ -472,5 +592,57 @@ const styles = StyleSheet.create({
     dailyExpense: {
         fontSize: 13,
         fontWeight: '500',
+    },
+    // Daily Budget Section
+    dailyBudgetSection: {
+        marginHorizontal: 16,
+        marginBottom: 16,
+        padding: 16,
+        borderRadius: 12,
+    },
+    dailyBudgetStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 12,
+    },
+    dailyBudgetStat: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    dailyBudgetLabel: {
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    dailyBudgetValue: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    // Recommendations Section
+    recommendationsSection: {
+        marginHorizontal: 16,
+        marginBottom: 16,
+        padding: 16,
+        borderRadius: 12,
+    },
+    recommendationCard: {
+        padding: 14,
+        borderRadius: 10,
+        marginTop: 10,
+        borderLeftWidth: 4,
+    },
+    recommendationTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    recommendationMessage: {
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    recommendationTip: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 8,
+        fontStyle: 'italic',
     },
 });

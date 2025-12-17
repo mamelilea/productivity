@@ -1,11 +1,14 @@
 import { useColorScheme } from '@/components/useColorScheme';
-import { EmptyState, LoadingSpinner, NoteCard } from '@/src/components';
+import { EmptyState, LoadingSpinner, NoteCard, PasswordPrompt } from '@/src/components';
+import { NoteWithCategory } from '@/src/models';
+import * as authService from '@/src/services/authService';
 import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+    Alert,
     FlatList,
     RefreshControl,
     StyleSheet,
@@ -25,6 +28,10 @@ export default function NotesScreen() {
   
   const noteCategories = categories.filter(c => c.type === 'NOTE');
   
+  // Auth state for private notes
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [pendingNoteId, setPendingNoteId] = useState<number | null>(null);
+  
   useEffect(() => {
     fetchNotes();
     fetchCategories();
@@ -40,6 +47,55 @@ export default function NotesScreen() {
   const filteredNotes = selectedCategoryId 
     ? notes.filter(n => n.category_id === selectedCategoryId)
     : notes;
+  
+  // Handle note press with auth for private notes
+  const handleNotePress = async (note: NoteWithCategory) => {
+    if (!note.is_private) {
+      // Public note - open directly
+      router.push(`/note/${note.id}`);
+      return;
+    }
+    
+    // Private note - require biometric auth
+    const preferredMethod = await authService.getPreferredAuthMethod();
+    
+    if (preferredMethod === 'none') {
+      // No auth set up, just open it
+      router.push(`/note/${note.id}`);
+      return;
+    }
+    
+    if (preferredMethod === 'biometric') {
+      const result = await authService.authenticateWithBiometric();
+      if (result.success) {
+        router.push(`/note/${note.id}`);
+      } else if (result.error !== 'Dibatalkan') {
+        // Try password fallback
+        const hasPass = await authService.hasFinancePassword();
+        if (hasPass) {
+          setPendingNoteId(note.id);
+          setShowPasswordPrompt(true);
+        } else {
+          Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
+        }
+      }
+    } else {
+      // Password auth
+      setPendingNoteId(note.id);
+      setShowPasswordPrompt(true);
+    }
+  };
+  
+  const handlePasswordSubmit = async (password: string): Promise<void> => {
+    const valid = await authService.verifyFinancePassword(password);
+    if (valid && pendingNoteId) {
+      setShowPasswordPrompt(false);
+      router.push(`/note/${pendingNoteId}`);
+      setPendingNoteId(null);
+    } else {
+      Alert.alert('Password Salah', 'Password yang Anda masukkan tidak valid.');
+    }
+  };
 
   if (isLoading && notes.length === 0) {
     return <LoadingSpinner />;
@@ -96,7 +152,7 @@ export default function NotesScreen() {
         renderItem={({ item }) => (
           <NoteCard
             note={item}
-            onPress={() => router.push(`/note/${item.id}`)}
+            onPress={() => handleNotePress(item)}
           />
         )}
         refreshControl={
@@ -121,6 +177,15 @@ export default function NotesScreen() {
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />
       </TouchableOpacity>
+      
+      {/* Password Prompt for Private Notes */}
+      <PasswordPrompt
+        visible={showPasswordPrompt}
+        onClose={() => { setShowPasswordPrompt(false); setPendingNoteId(null); }}
+        onSubmit={handlePasswordSubmit}
+        title="Catatan Private"
+        subtitle="Masukkan password untuk membuka catatan ini"
+      />
     </View>
   );
 }

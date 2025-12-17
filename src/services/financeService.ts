@@ -483,6 +483,98 @@ export const getBudgetRecommendation = async (year: number, month: number): Prom
     return null;
 };
 
+// Get comprehensive AI-style budget recommendations
+export interface BudgetRecommendation {
+    type: 'success' | 'warning' | 'danger' | 'info';
+    title: string;
+    message: string;
+    actionTip?: string;
+}
+
+export const getAIBudgetRecommendations = async (year: number, month: number): Promise<BudgetRecommendation[]> => {
+    const recommendations: BudgetRecommendation[] = [];
+    const report = await getMonthlyReport(year, month);
+    const budget = report.budget;
+    const today = new Date();
+    const dayOfMonth = today.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const daysLeft = daysInMonth - dayOfMonth;
+
+    // Get category breakdown for expense
+    const expenseBreakdown = await getCategoryBreakdown(year, month, 'EXPENSE');
+
+    // 1. Daily budget analysis
+    if (budget && budget.daily_budget > 0) {
+        const todayStr = getTodayDate();
+        const todayReport = await getDailyReport(todayStr);
+        const todaySpent = todayReport.total_expense;
+
+        if (todaySpent > budget.daily_budget) {
+            const over = todaySpent - budget.daily_budget;
+            recommendations.push({
+                type: 'danger',
+                title: '⚠️ Budget Harian Terlampaui',
+                message: `Kamu sudah keluar ${formatCurrency(over)} lebih dari budget harian.`,
+                actionTip: `Besok, hemat ${formatCurrency(over / daysLeft)} per hari untuk kembali on-track.`
+            });
+        } else if (todaySpent >= budget.daily_budget * 0.8) {
+            recommendations.push({
+                type: 'warning',
+                title: '⚡ Mendekati Limit Harian',
+                message: `Sisa budget hari ini: ${formatCurrency(budget.daily_budget - todaySpent)}`,
+                actionTip: 'Pertimbangkan untuk menunda pengeluaran non-esensial.'
+            });
+        }
+    }
+
+    // 2. Monthly overspending analysis
+    if (budget && report.total_expense > budget.planned_expense) {
+        const over = report.total_expense - budget.planned_expense;
+        recommendations.push({
+            type: 'danger',
+            title: '🚨 Budget Bulanan Terlampaui',
+            message: `Pengeluaran sudah melebihi budget ${formatCurrency(over)}.`,
+            actionTip: 'Fokus pada pengeluaran esensial saja untuk sisa bulan ini.'
+        });
+    } else if (budget && daysLeft > 0) {
+        const remaining = budget.planned_expense - report.total_expense;
+        const safeDailyLimit = remaining / daysLeft;
+        if (safeDailyLimit > 0) {
+            recommendations.push({
+                type: 'info',
+                title: '📊 Sisa Budget',
+                message: `Budget tersisa ${formatCurrency(remaining)} untuk ${daysLeft} hari.`,
+                actionTip: `Limit aman: ${formatCurrency(safeDailyLimit)}/hari`
+            });
+        }
+    }
+
+    // 3. Top spending category insight
+    if (expenseBreakdown.length > 0) {
+        const topCategory = expenseBreakdown[0];
+        if (topCategory.percentage >= 40) {
+            recommendations.push({
+                type: 'warning',
+                title: `${topCategory.category_icon} Pengeluaran Terbesar: ${topCategory.category_name}`,
+                message: `${topCategory.percentage}% dari total pengeluaran (${formatCurrency(topCategory.total)})`,
+                actionTip: `Pertimbangkan untuk mengurangi pengeluaran di kategori ini.`
+            });
+        }
+    }
+
+    // 4. Positive reinforcement
+    if (recommendations.length === 0 && report.balance >= 0) {
+        recommendations.push({
+            type: 'success',
+            title: '🎉 Keuangan Sehat',
+            message: `Surplus bulan ini: ${formatCurrency(report.balance)}`,
+            actionTip: 'Pertahankan! Pertimbangkan untuk menabung atau investasi.'
+        });
+    }
+
+    return recommendations;
+};
+
 // Check daily budget status
 export const getDailyBudgetStatus = async (): Promise<{
     budget: number;

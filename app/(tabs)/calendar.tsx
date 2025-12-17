@@ -9,8 +9,8 @@ import {
     NAMA_HARI
 } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
     ScrollView,
     StyleSheet,
@@ -29,17 +29,22 @@ export default function CalendarScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [daySchedules, setDaySchedules] = useState<Schedule[]>([]);
   
-  useEffect(() => {
-    fetchSchedules();
-  }, []);
+  // Auto-refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchSchedules();
+    }, [])
+  );
   
-  useEffect(() => {
-    const loadDaySchedules = async () => {
-      const schedules = await getSchedulesForDate(selectedDate);
-      setDaySchedules(schedules);
-    };
-    loadDaySchedules();
-  }, [selectedDate]);
+  useFocusEffect(
+    useCallback(() => {
+      const loadDaySchedules = async () => {
+        const schedules = await getSchedulesForDate(selectedDate);
+        setDaySchedules(schedules);
+      };
+      loadDaySchedules();
+    }, [selectedDate])
+  );
   
   // Get tasks with deadline on selected date
   const tasksOnDate = tasks.filter(t => {
@@ -312,14 +317,20 @@ const styles = StyleSheet.create({
   },
   indicators: {
     flexDirection: 'row',
-    gap: 2,
-    marginTop: 2,
-    height: 4,
+    gap: 4,
+    marginTop: 4,
+    height: 6,
+    justifyContent: 'center',
   },
   indicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
   },
   eventsContainer: {
     flex: 1,

@@ -5,14 +5,14 @@ import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { formatTanggal, NAMA_HARI } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const HOUR_HEIGHT = 60; // Height per hour in pixels
@@ -34,15 +34,18 @@ export default function CalendarDayDetailScreen() {
   const currentHour = new Date().getHours();
   const currentMinute = new Date().getMinutes();
   
-  useEffect(() => {
-    const loadDaySchedules = async () => {
-      if (date) {
-        const schedules = await getSchedulesForDate(date);
-        setDaySchedules(schedules);
-      }
-    };
-    loadDaySchedules();
-  }, [date]);
+  // Auto-refresh when screen comes into focus (e.g., after editing/deleting)
+  useFocusEffect(
+    useCallback(() => {
+      const loadDaySchedules = async () => {
+        if (date) {
+          const schedules = await getSchedulesForDate(date);
+          setDaySchedules(schedules);
+        }
+      };
+      loadDaySchedules();
+    }, [date])
+  );
   
   // Get tasks with deadline on this date
   const tasksOnDate = tasks.filter(t => {
@@ -180,6 +183,7 @@ export default function CalendarDayDetailScreen() {
           <View style={styles.eventsContainer}>
             {daySchedules.map(schedule => {
               const scheduleStyle = getScheduleStyle(schedule);
+              const isCompact = scheduleStyle.height < 45; // Compact mode for short events
               return (
                 <TouchableOpacity
                   key={schedule.id}
@@ -187,19 +191,35 @@ export default function CalendarDayDetailScreen() {
                   onPress={() => router.push(`/schedule/${schedule.id}`)}
                   activeOpacity={0.8}
                 >
-                  <View style={styles.scheduleBlockContent}>
-                    <Ionicons name="checkmark-circle" size={14} color="rgba(255,255,255,0.9)" />
-                    <Text style={styles.scheduleTitle} numberOfLines={1}>
-                      {schedule.title}
-                    </Text>
-                  </View>
-                  <Text style={styles.scheduleTime}>
-                    {formatTimeRange(schedule)}
-                  </Text>
-                  {getTypeLabel(schedule) && (
-                    <Text style={styles.scheduleType}>
-                      {getTypeLabel(schedule)}
-                    </Text>
+                  {isCompact ? (
+                    // Compact single-line layout for short events
+                    <View style={styles.scheduleBlockCompact}>
+                      <Ionicons name="checkmark-circle" size={12} color="rgba(255,255,255,0.9)" />
+                      <Text style={styles.scheduleTitleCompact} numberOfLines={1}>
+                        {schedule.title}
+                      </Text>
+                      <Text style={styles.scheduleTimeCompact}>
+                        {formatTimeRange(schedule)}
+                      </Text>
+                    </View>
+                  ) : (
+                    // Normal multi-line layout
+                    <>
+                      <View style={styles.scheduleBlockContent}>
+                        <Ionicons name="checkmark-circle" size={14} color="rgba(255,255,255,0.9)" />
+                        <Text style={styles.scheduleTitle} numberOfLines={1}>
+                          {schedule.title}
+                        </Text>
+                      </View>
+                      <Text style={styles.scheduleTime}>
+                        {formatTimeRange(schedule)}
+                      </Text>
+                      {getTypeLabel(schedule) && (
+                        <Text style={styles.scheduleType}>
+                          {getTypeLabel(schedule)}
+                        </Text>
+                      )}
+                    </>
                   )}
                 </TouchableOpacity>
               );
@@ -360,6 +380,23 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 10,
     marginTop: 2,
+  },
+  // Compact styles for short events
+  scheduleBlockCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  scheduleTitleCompact: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  scheduleTimeCompact: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 10,
   },
   fab: {
     position: 'absolute',
