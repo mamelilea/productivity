@@ -1,0 +1,442 @@
+[
+  {
+    "id": "TC001",
+    "title": "Add New Task with Required Fields",
+    "description": "Verify that a new task can be added by filling all required fields including task type, title, and deadline, and that it appears correctly in the task list.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the 'Tambah Tugas' (Add Task) screen."
+      },
+      {
+        "type": "action",
+        "description": "Select a valid task type (Kuliah or Non-Kuliah)."
+      },
+      {
+        "type": "action",
+        "description": "Fill in the task title and set a valid deadline."
+      },
+      {
+        "type": "action",
+        "description": "Leave optional fields empty and save the task."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the task is saved and displayed in the task list with correct status TODO and default priority."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Add New Task with All Details Populated",
+    "description": "Verify the creation of a task when all fields including course name, submission type, links, notes, priority, and category are provided.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to 'Tambah Tugas' screen."
+      },
+      {
+        "type": "action",
+        "description": "Select task type Kuliah."
+      },
+      {
+        "type": "action",
+        "description": "Fill in title, course name, submission type, link, notes, deadline, priority HIGH and assign a category."
+      },
+      {
+        "type": "action",
+        "description": "Save the task."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the task saves all details and displays correctly in task list and detail view."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Validate Required Fields in Task Creation",
+    "description": "Verify that creating a task without required fields (e.g., no title or deadline) shows appropriate validation errors and prevents saving.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to 'Tambah Tugas' screen."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save a task without entering title."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that validation error for missing title is shown and task is not saved."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save a task without entering deadline."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that validation error for missing deadline is shown and task is not saved."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Cycle Task Status from TODO to DONE",
+    "description": "Verify that tapping or swiping a task cycles its status sequentially from TODO to PROGRESS to DONE and records completion timestamp when done.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to task list."
+      },
+      {
+        "type": "action",
+        "description": "Tap on a TODO status task once."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the status changes to PROGRESS."
+      },
+      {
+        "type": "action",
+        "description": "Tap/swipe the task again."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the status changes to DONE and completion timestamp is recorded."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Edit Existing Task Details",
+    "description": "Verify that updating task details such as title, deadline, priority, and category is saved and reflected properly in the task list and details.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to a specific task detail view."
+      },
+      {
+        "type": "action",
+        "description": "Edit title, adjust deadline, change priority, update category."
+      },
+      {
+        "type": "action",
+        "description": "Save the changes."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all changes appear correctly in the task detail and task list."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Delete Note and Confirm Removal",
+    "description": "Verify the user can delete a note and that it is removed from the note list.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to notes list."
+      },
+      {
+        "type": "action",
+        "description": "Select a note and delete it."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the note no longer appears in the notes list."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Create and Edit Note with Category",
+    "description": "Verify that notes can be created with categories and edited later with category changes reflected.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to add note screen."
+      },
+      {
+        "type": "action",
+        "description": "Create a new note including a category assignment."
+      },
+      {
+        "type": "action",
+        "description": "Save the note."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the note appears in the category filter."
+      },
+      {
+        "type": "action",
+        "description": "Edit the note changing its category."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the note appears under new category and not old."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Add Recurring Schedule Event",
+    "description": "Verify that a schedule event can be created with a recurrence rule (e.g., weekly) and displays correctly in calendar views.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to add schedule event screen."
+      },
+      {
+        "type": "action",
+        "description": "Create a schedule event of type Kuliah with weekly recurrence."
+      },
+      {
+        "type": "action",
+        "description": "Save the schedule."
+      },
+      {
+        "type": "action",
+        "description": "Go to calendar tab and switch between weekly and monthly views."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that recurring events appear on correct recurring dates."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Notification Permission and Delivery",
+    "description": "Verify that the app requests notification permission upon first use, handles user denial correctly, and sends reminders before tasks' deadline and schedule start times.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open the app first time to trigger notification permission request."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify permission dialog appears."
+      },
+      {
+        "type": "action",
+        "description": "Deny notification permission and observe app behavior."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify app handles denied permission gracefully without crashes."
+      },
+      {
+        "type": "action",
+        "description": "Allow notification permission and create a task with deadline coming soon."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the reminder notification is delivered before the deadline as configured."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Data Export Functionality",
+    "description": "Verify that users can export their data including tasks, notes, schedules, and categories and that exported data is complete and correctly formatted.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to settings and select data export option."
+      },
+      {
+        "type": "action",
+        "description": "Perform data export."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify exported file contains all current tasks, notes, schedules, categories and is readable/shared."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Task and Note Category Management",
+    "description": "Verify user can create, edit, delete custom categories with custom colors and assign tasks and notes to these categories.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to category management screen."
+      },
+      {
+        "type": "action",
+        "description": "Add new category with a custom name and color."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify category appears in category lists and can be selected during task/note creation."
+      },
+      {
+        "type": "action",
+        "description": "Edit category name and color."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify changes reflect everywhere the category is used."
+      },
+      {
+        "type": "action",
+        "description": "Delete category and verify reassignment or removal in tasks and notes."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no orphaned category references remain."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "UI Localization in Indonesian",
+    "description": "Verify all user interface texts including dates and days are displayed correctly in the Indonesian language locale.",
+    "category": "ui",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Launch the app with Indonesian locale settings."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that all UI strings including task statuses, labels, buttons and settings are in Indonesian."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify date and day formats follow Indonesian locale conventions."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Application Performance on Launch and Scrolling",
+    "description": "Verify that app launch time and scroll performance meet user experience requirements under typical data load.",
+    "category": "performance",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Launch the app with a populated dataset of tasks, notes and schedules."
+      },
+      {
+        "type": "assertion",
+        "description": "Measure and verify app launch time is within acceptable limits."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to task and notes lists and scroll through entries."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify scrolling is smooth without stutter or delay."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Verify Data Persistence and Crash Recovery",
+    "description": "Validate all data is saved reliably in SQLite and remains intact after app crashes or forced terminations.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create several tasks, notes and schedules."
+      },
+      {
+        "type": "action",
+        "description": "Force close or crash the app unexpectedly."
+      },
+      {
+        "type": "action",
+        "description": "Relaunch the app."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all previously saved data loads correctly and no data loss occurs."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Calendar Event Detail View Accessibility",
+    "description": "Verify tapping on calendar date or event opens the event detail correctly showing full event information.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to calendar tab."
+      },
+      {
+        "type": "action",
+        "description": "Select a date that has scheduled events."
+      },
+      {
+        "type": "action",
+        "description": "Tap on an event within that date."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify event detail view opens displaying all event attributes including type, title, recurrence, and notes."
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Settings: Change Notification Preferences",
+    "description": "Verify user can enable or disable notification reminders, and changes take effect accordingly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to settings screen."
+      },
+      {
+        "type": "action",
+        "description": "Toggle notification reminder settings off."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no notifications are sent for tasks and schedules."
+      },
+      {
+        "type": "action",
+        "description": "Toggle notification reminders on."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify notifications resume as configured."
+      }
+    ]
+  }
+]

@@ -1,0 +1,165 @@
+{
+  "meta": {
+    "project": "TaskMaster",
+    "date": "2025-12-10",
+    "prepared_by": "Auto-generated"
+  },
+  "product_overview": "TaskMaster is a mobile task management application designed specifically for Indonesian university students to organize their academic tasks, notes, and schedules in one integrated platform.",
+  "core_goals": [
+    "Provide a comprehensive task management system for academic activities",
+    "Help students prioritize their work based on urgency and importance",
+    "Deliver automatic reminders for task deadlines",
+    "Integrate academic schedules within a single application"
+  ],
+  "key_features": [
+    "Task Management with types (Kuliah and Non-Kuliah), statuses (TODO, PROGRESS, DONE), and priorities (LOW, MEDIUM, HIGH)",
+    "Detailed task attributes including course name, submission type, links, notes, and deadline tracking",
+    "Note Management with create, read, update, delete functionalities and category organization",
+    "Schedule Management featuring types like Kuliah, UTS, UAS, and custom events with recurring options",
+    "Category System for organizing tasks and notes with custom colors",
+    "Notification System for reminders before deadlines and schedule start, supporting push notifications and permission handling",
+    "Data Export feature allowing users to backup and share their data",
+    "Home Dashboard showing an overview of today’s tasks, deadlines, quick add actions, and task statistics",
+    "Settings for notification preferences, theme, data management, and app info"
+  ],
+  "user_flow_summary": [
+    "Add New Task: Tap 'Tambah Tugas', select task type, fill details with optional course data, select category, save, and see the task in the list",
+    "Complete Task: View task list, tap or swipe to cycle status from TODO to DONE, record completion timestamp",
+    "View Calendar: Navigate to calendar tab, view weekly or monthly schedule, tap dates to see event details"
+  ],
+  "validation_criteria": [
+    "Task creation and editing works with required fields and reflects correctly in the task list",
+    "Notifications are delivered timely per task deadlines and schedules",
+    "Data is persisted reliably locally in SQLite without loss during crashes",
+    "Calendar shows correct recurring and one-time events",
+    "UI is fully localized in Indonesian with correct date and day formatting",
+    "Application performs smoothly meeting launch time and scrolling requirements",
+    "CRUD operations for tasks, notes, and schedules are verified through unit and integration testing"
+  ],
+  "code_summary": {
+    "tech_stack": [
+      "TypeScript",
+      "React Native",
+      "Expo",
+      "expo-router",
+      "expo-sqlite",
+      "Zustand",
+      "React Navigation"
+    ],
+    "features": [
+      {
+        "name": "Home Screen",
+        "description": "Main dashboard showing overview of tasks, notes, and schedules with quick actions",
+        "files": [
+          "app/(tabs)/index.tsx"
+        ]
+      },
+      {
+        "name": "Tasks Management",
+        "description": "Task list view with ability to add, edit, view, and complete tasks with categories and priorities",
+        "files": [
+          "app/(tabs)/tasks.tsx",
+          "app/task/add.tsx",
+          "app/task/[id].tsx",
+          "src/services/taskService.ts",
+          "src/models/task.ts",
+          "src/components/TaskCard.tsx"
+        ]
+      },
+      {
+        "name": "Notes Management",
+        "description": "Notes list with ability to add, edit, and delete notes with category organization",
+        "files": [
+          "app/(tabs)/notes.tsx",
+          "app/note/add.tsx",
+          "app/note/[id].tsx",
+          "src/services/noteService.ts",
+          "src/models/note.ts",
+          "src/components/NoteCard.tsx"
+        ]
+      },
+      {
+        "name": "Calendar/Schedule",
+        "description": "Calendar view showing scheduled events with ability to add and manage schedules",
+        "files": [
+          "app/(tabs)/calendar.tsx",
+          "app/schedule/add.tsx",
+          "app/schedule/[id].tsx",
+          "src/services/scheduleService.ts",
+          "src/models/schedule.ts"
+        ]
+      },
+      {
+        "name": "Settings",
+        "description": "App settings including theme, language, notifications, and data export options",
+        "files": [
+          "app/(tabs)/settings.tsx"
+        ]
+      },
+      {
+        "name": "Category Service",
+        "description": "Category management for organizing tasks, notes, and schedules",
+        "files": [
+          "src/services/categoryService.ts",
+          "src/models/category.ts"
+        ]
+      },
+      {
+        "name": "Notification Service",
+        "description": "Push notification scheduling and management for reminders",
+        "files": [
+          "src/services/notificationService.ts",
+          "src/models/notification.ts"
+        ]
+      },
+      {
+        "name": "Export Service",
+        "description": "Data export functionality for backing up and sharing data",
+        "files": [
+          "src/services/exportService.ts"
+        ]
+      },
+      {
+        "name": "Database Layer",
+        "description": "SQLite database initialization and connection using expo-sqlite",
+        "files": [
+          "src/db/index.ts"
+        ]
+      },
+      {
+        "name": "State Management",
+        "description": "Global state management using Zustand store",
+        "files": [
+          "src/store/index.ts"
+        ]
+      },
+      {
+        "name": "UI Components",
+        "description": "Reusable UI components including TaskCard, NoteCard, EmptyState, and LoadingSpinner",
+        "files": [
+          "src/components/TaskCard.tsx",
+          "src/components/NoteCard.tsx",
+          "src/components/EmptyState.tsx",
+          "src/components/LoadingSpinner.tsx"
+        ]
+      },
+      {
+        "name": "Themed Components",
+        "description": "Theme-aware components supporting light/dark mode",
+        "files": [
+          "components/Themed.tsx",
+          "components/useColorScheme.ts",
+          "components/useColorScheme.web.ts"
+        ]
+      },
+      {
+        "name": "Navigation Layout",
+        "description": "Tab-based navigation layout with expo-router",
+        "files": [
+          "app/_layout.tsx",
+          "app/(tabs)/_layout.tsx"
+        ]
+      }
+    ]
+  }
+}

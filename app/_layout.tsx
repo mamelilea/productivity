@@ -7,14 +7,15 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { initializeDatabase } from '@/src/db/database';
+import { requestNotificationPermissions } from '@/src/services/notificationService';
+import { useAppStore } from '@/src/store/appStore';
 
 export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
+    ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
@@ -26,8 +27,25 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });
+  
+  const initialize = useAppStore((state) => state.initialize);
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+  // Initialize database and app state
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        await initializeDatabase();
+        await requestNotificationPermissions();
+        await initialize();
+      } catch (e) {
+        console.error('Failed to initialize app:', e);
+      }
+    };
+    
+    initApp();
+  }, []);
+
+  // Handle font loading errors
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -52,7 +70,76 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen 
+          name="task/[id]" 
+          options={{ 
+            title: 'Detail Tugas',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="task/new" 
+          options={{ 
+            title: 'Tambah Tugas',
+            presentation: 'modal' 
+          }} 
+        />
+        <Stack.Screen 
+          name="note/[id]" 
+          options={{ 
+            title: 'Detail Catatan',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="note/new" 
+          options={{ 
+            title: 'Tambah Catatan',
+            presentation: 'modal' 
+          }} 
+        />
+        <Stack.Screen 
+          name="schedule/[id]" 
+          options={{ 
+            title: 'Detail Jadwal',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="schedule/new" 
+          options={{ 
+            title: 'Tambah Jadwal',
+            presentation: 'modal' 
+          }} 
+        />
+        <Stack.Screen 
+          name="logbook/[date]" 
+          options={{ 
+            title: 'Logbook',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="finance/new" 
+          options={{ 
+            title: 'Tambah Transaksi',
+            presentation: 'modal' 
+          }} 
+        />
+        <Stack.Screen 
+          name="finance/report" 
+          options={{ 
+            title: 'Laporan Keuangan',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
+          name="finance/[id]" 
+          options={{ 
+            title: 'Detail Transaksi',
+            presentation: 'card' 
+          }} 
+        />
       </Stack>
     </ThemeProvider>
   );

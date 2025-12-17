@@ -1,0 +1,78 @@
+{
+  "tech_stack": [
+    "TypeScript",
+    "React Native",
+    "Expo",
+    "expo-router",
+    "expo-sqlite",
+    "Zustand",
+    "React Navigation"
+  ],
+  "features": [
+    {
+      "name": "Home Screen",
+      "description": "Main dashboard showing overview of tasks, notes, and schedules with quick actions",
+      "files": ["app/(tabs)/index.tsx"]
+    },
+    {
+      "name": "Tasks Management",
+      "description": "Task list view with ability to add, edit, view, and complete tasks with categories and priorities",
+      "files": ["app/(tabs)/tasks.tsx", "app/task/add.tsx", "app/task/[id].tsx", "src/services/taskService.ts", "src/models/task.ts", "src/components/TaskCard.tsx"]
+    },
+    {
+      "name": "Notes Management",
+      "description": "Notes list with ability to add, edit, and delete notes with category organization",
+      "files": ["app/(tabs)/notes.tsx", "app/note/add.tsx", "app/note/[id].tsx", "src/services/noteService.ts", "src/models/note.ts", "src/components/NoteCard.tsx"]
+    },
+    {
+      "name": "Calendar/Schedule",
+      "description": "Calendar view showing scheduled events with ability to add and manage schedules",
+      "files": ["app/(tabs)/calendar.tsx", "app/schedule/add.tsx", "app/schedule/[id].tsx", "src/services/scheduleService.ts", "src/models/schedule.ts"]
+    },
+    {
+      "name": "Settings",
+      "description": "App settings including theme, language, notifications, and data export options",
+      "files": ["app/(tabs)/settings.tsx"]
+    },
+    {
+      "name": "Category Service",
+      "description": "Category management for organizing tasks, notes, and schedules",
+      "files": ["src/services/categoryService.ts", "src/models/category.ts"]
+    },
+    {
+      "name": "Notification Service",
+      "description": "Push notification scheduling and management for reminders",
+      "files": ["src/services/notificationService.ts", "src/models/notification.ts"]
+    },
+    {
+      "name": "Export Service",
+      "description": "Data export functionality for backing up and sharing data",
+      "files": ["src/services/exportService.ts"]
+    },
+    {
+      "name": "Database Layer",
+      "description": "SQLite database initialization and connection using expo-sqlite",
+      "files": ["src/db/index.ts"]
+    },
+    {
+      "name": "State Management",
+      "description": "Global state management using Zustand store",
+      "files": ["src/store/index.ts"]
+    },
+    {
+      "name": "UI Components",
+      "description": "Reusable UI components including TaskCard, NoteCard, EmptyState, and LoadingSpinner",
+      "files": ["src/components/TaskCard.tsx", "src/components/NoteCard.tsx", "src/components/EmptyState.tsx", "src/components/LoadingSpinner.tsx"]
+    },
+    {
+      "name": "Themed Components",
+      "description": "Theme-aware components supporting light/dark mode",
+      "files": ["components/Themed.tsx", "components/useColorScheme.ts", "components/useColorScheme.web.ts"]
+    },
+    {
+      "name": "Navigation Layout",
+      "description": "Tab-based navigation layout with expo-router",
+      "files": ["app/_layout.tsx", "app/(tabs)/_layout.tsx"]
+    }
+  ]
+}

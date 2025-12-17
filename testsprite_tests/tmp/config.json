@@ -1,0 +1,16 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8081",
+  "executionArgs": {
+    "projectName": "project-dev",
+    "projectPath": "c:\\Users\\Hp\\OneDrive\\Desktop\\project-dev",
+    "testIds": [],
+    "additionalInstruction": "",
+    "envs": {
+      "API_KEY": "sk-user-pqChr9JPJojIcX2iQ0r5YMEsVPYk1zxBYVfpDsmaMmuxLIMABqUl3LiNKmfI4LLBdBr3XJzZrycj15rR_yXM8wL9cdLrNhVdgjU8ap6C6w8zksBhNGoJtO8bdMx_y_cgNhQ"
+    }
+  },
+  "proxy": "http://cc38660f-012d-4c08-b463-3f5d58458421:1D8jPijKeOnzNg8rge7ydKYeEdqlgb37@tun.testsprite.com:8080"
+}
