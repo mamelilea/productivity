@@ -11,6 +11,7 @@ import {
     TaskType
 } from '@/src/models';
 import * as customTypeService from '@/src/services/customTypeService';
+import * as notificationService from '@/src/services/notificationService';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import {
@@ -18,6 +19,7 @@ import {
     COLORS,
     DARK_COLORS,
     PRIORITY_OPTIONS,
+    REMINDER_PRESETS,
     TASK_TYPE_OPTIONS
 } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';

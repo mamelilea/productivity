@@ -351,7 +351,7 @@ export default function SettingsScreen() {
               });
             }
             if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
-              const tagLabels = entry.tags.map(t => `#${t.label || t}`).join(' ');
+              const tagLabels = entry.tags.map((t: string) => `#${t}`).join(' ');
               body += `      Tags: ${tagLabels}\n`;
             }
             body += `\n`;
