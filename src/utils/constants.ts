@@ -1,5 +1,5 @@
 // App constants
-export const APP_NAME = 'TaskMaster';
+export const APP_NAME = 'Productivity';
 export const APP_VERSION = '1.0.0';
 
 // Colors

@@ -3,6 +3,7 @@ import { PasswordPrompt } from '@/src/components';
 import { resetDatabase } from '@/src/db/database';
 import * as authService from '@/src/services/authService';
 import { formatCurrency, getAllTransactions, getMonthlyBudget } from '@/src/services/financeService';
+import { getAllCategories, getAllLogbookEntries } from '@/src/services/logbookService';
 import * as settingsService from '@/src/services/settingsService';
 import { useAppStore } from '@/src/store/appStore';
 import { APP_NAME, APP_VERSION, COLORS, DARK_COLORS } from '@/src/utils/constants';
@@ -224,8 +225,8 @@ export default function SettingsScreen() {
         day: 'numeric' 
       });
       
-      // Get transaction data
-      const transactions = await getAllTransactions(100);
+      // Get all data
+      const transactions = await getAllTransactions(1000); // Get more transactions
       const budget = await getMonthlyBudget(today.getFullYear(), today.getMonth() + 1);
       
       // Calculate totals
@@ -236,18 +237,135 @@ export default function SettingsScreen() {
         .filter(t => t.type === 'EXPENSE')
         .reduce((sum, t) => sum + t.amount, 0);
       
-      // Build email body
-      let body = `📊 BACKUP DATA ${APP_NAME}\n`;
+      // Build comprehensive email body
+      let body = `📊 BACKUP DATA LENGKAP ${APP_NAME}\n`;
       body += `📅 ${dateStr}\n`;
-      body += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
       
+      // ========== RINGKASAN ==========
       body += `📈 RINGKASAN DATA\n`;
       body += `• Tugas: ${tasks.length} item\n`;
       body += `• Catatan: ${notes.length} item\n`;
       body += `• Jadwal: ${schedules.length} item\n`;
       body += `• Transaksi: ${transactions.length} item\n\n`;
       
-      body += `💰 RINGKASAN KEUANGAN\n`;
+      // ========== TUGAS - DETAIL LENGKAP ==========
+      body += `\n${'═'.repeat(40)}\n`;
+      body += `📋 DAFTAR TUGAS (DETAIL LENGKAP)\n`;
+      body += `${'═'.repeat(40)}\n\n`;
+      
+      tasks.forEach((task, idx) => {
+        const status = task.status === 'DONE' ? '✅' : task.status === 'PROGRESS' ? '🔄' : '⬜';
+        const priority = task.priority === 'HIGH' ? '🔴' : task.priority === 'MEDIUM' ? '🟡' : '🟢';
+        body += `${idx + 1}. ${status} ${task.title}\n`;
+        body += `   Tipe: ${task.type}${task.custom_type ? ` (${task.custom_type})` : ''}\n`;
+        body += `   Status: ${task.status} | Prioritas: ${priority} ${task.priority}\n`;
+        if (task.description) body += `   Deskripsi: ${task.description}\n`;
+        if (task.deadline) body += `   Deadline: ${task.deadline}\n`;
+        body += `   Dibuat: ${task.created_at}\n`;
+        if (task.completed_at) body += `   Selesai: ${task.completed_at}\n`;
+        body += `\n`;
+      });
+      
+      // ========== CATATAN - ISI LENGKAP ==========
+      body += `\n${'═'.repeat(40)}\n`;
+      body += `📝 DAFTAR CATATAN (ISI LENGKAP)\n`;
+      body += `${'═'.repeat(40)}\n\n`;
+      
+      notes.forEach((note, idx) => {
+        const privacyIcon = note.is_private ? '🔒' : '📄';
+        body += `${idx + 1}. ${privacyIcon} ${note.title}\n`;
+        body += `   ${note.is_private ? '[PRIVATE] ' : ''}Kategori: ${note.category_name || 'Tanpa kategori'}\n`;
+        body += `   Dibuat: ${note.created_at}\n`;
+        body += `   Diupdate: ${note.updated_at}\n`;
+        body += `   --- ISI CATATAN ---\n`;
+        // Include full content, indent each line
+        if (note.content) {
+          const contentLines = note.content.split('\n');
+          contentLines.forEach(line => {
+            body += `   ${line}\n`;
+          });
+        } else {
+          body += `   (kosong)\n`;
+        }
+        body += `   --- END ---\n\n`;
+      });
+      
+      // ========== JADWAL - DETAIL LENGKAP ==========
+      body += `\n${'═'.repeat(40)}\n`;
+      body += `📅 DAFTAR JADWAL (DETAIL LENGKAP)\n`;
+      body += `${'═'.repeat(40)}\n\n`;
+      
+      const NAMA_HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      
+      schedules.forEach((schedule, idx) => {
+        body += `${idx + 1}. 📆 ${schedule.title}\n`;
+        body += `   Tipe: ${schedule.type}${schedule.custom_type ? ` (${schedule.custom_type})` : ''}\n`;
+        if (schedule.description) body += `   Deskripsi: ${schedule.description}\n`;
+        body += `   Waktu Mulai: ${schedule.start_time}\n`;
+        if (schedule.end_time) body += `   Waktu Selesai: ${schedule.end_time}\n`;
+        if (schedule.location) body += `   Lokasi: ${schedule.location}\n`;
+        
+        // Recurrence details
+        if (schedule.recurrence_type !== 'none') {
+          body += `   🔄 PERULANGAN:\n`;
+          body += `      Tipe: ${schedule.recurrence_type}\n`;
+          body += `      Interval: Setiap ${schedule.recurrence_interval} ${schedule.recurrence_type === 'daily' ? 'hari' : schedule.recurrence_type === 'weekly' ? 'minggu' : schedule.recurrence_type === 'monthly' ? 'bulan' : 'tahun'}\n`;
+          if (schedule.recurrence_days && schedule.recurrence_days.length > 0) {
+            const dayNames = schedule.recurrence_days.map(d => NAMA_HARI[d]).join(', ');
+            body += `      Hari: ${dayNames}\n`;
+          }
+          body += `      Batas: ${schedule.recurrence_end_type}\n`;
+          if (schedule.recurrence_end_date) body += `      Sampai: ${schedule.recurrence_end_date}\n`;
+          if (schedule.recurrence_end_count) body += `      Jumlah: ${schedule.recurrence_end_count} kali\n`;
+        } else {
+          body += `   Tidak berulang (sekali saja)\n`;
+        }
+        body += `   Dibuat: ${schedule.created_at}\n\n`;
+      });
+      
+      // ========== LOGBOOK - SEMUA ENTRI ==========
+      const logbookCategories = await getAllCategories();
+      const logbookEntries = await getAllLogbookEntries();
+      
+      body += `\n${'═'.repeat(40)}\n`;
+      body += `📓 DATA LOGBOOK (LENGKAP)\n`;
+      body += `${'═'.repeat(40)}\n\n`;
+      
+      body += `Kategori: ${logbookCategories.length} | Entri: ${logbookEntries.length}\n\n`;
+      
+      // Group entries by category
+      logbookCategories.forEach((cat, idx) => {
+        const categoryEntries = logbookEntries.filter(e => e.category_id === cat.id);
+        body += `${idx + 1}. ${cat.icon || '📝'} ${cat.name}\n`;
+        body += `   Warna: ${cat.color || '#6366F1'} | Jumlah Entri: ${categoryEntries.length}\n`;
+        
+        if (categoryEntries.length > 0) {
+          body += `   --- ENTRI ---\n`;
+          categoryEntries.forEach(entry => {
+            body += `   📅 ${entry.date}\n`;
+            if (entry.content) {
+              const contentLines = entry.content.split('\n');
+              contentLines.forEach(line => {
+                body += `      ${line}\n`;
+              });
+            }
+            if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
+              const tagLabels = entry.tags.map(t => `#${t.label || t}`).join(' ');
+              body += `      Tags: ${tagLabels}\n`;
+            }
+            body += `\n`;
+          });
+        }
+        body += `\n`;
+      });
+      
+      // ========== KEUANGAN - SEMUA TRANSAKSI ==========
+      body += `\n${'═'.repeat(40)}\n`;
+      body += `💰 DATA KEUANGAN (LENGKAP)\n`;
+      body += `${'═'.repeat(40)}\n\n`;
+      
+      body += `RINGKASAN:\n`;
       body += `• Total Pemasukan: ${formatCurrency(totalIncome)}\n`;
       body += `• Total Pengeluaran: ${formatCurrency(totalExpense)}\n`;
       body += `• Saldo: ${formatCurrency(totalIncome - totalExpense)}\n`;
@@ -257,38 +375,30 @@ export default function SettingsScreen() {
       }
       body += `\n`;
       
-      body += `📝 DAFTAR TUGAS\n`;
-      tasks.slice(0, 20).forEach((task) => {
-        const status = task.status === 'DONE' ? '✅' : '⬜';
-        body += `${status} ${task.title}\n`;
-      });
-      if (tasks.length > 20) body += `... dan ${tasks.length - 20} tugas lainnya\n`;
-      body += `\n`;
-      
-      body += `📄 DAFTAR CATATAN\n`;
-      notes.slice(0, 10).forEach((note, i) => {
-        body += `• ${note.title}\n`;
-      });
-      if (notes.length > 10) body += `... dan ${notes.length - 10} catatan lainnya\n`;
-      body += `\n`;
-      
-      body += `💸 TRANSAKSI TERAKHIR\n`;
-      transactions.slice(0, 15).forEach((t) => {
+      body += `DAFTAR TRANSAKSI:\n`;
+      transactions.forEach((t, idx) => {
         const icon = t.type === 'INCOME' ? '➕' : '➖';
-        body += `${icon} ${t.description || t.category_name || 'Transaksi'}: ${formatCurrency(t.amount)}\n`;
+        body += `${idx + 1}. ${icon} ${t.date}\n`;
+        body += `   ${t.type === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'}: ${formatCurrency(t.amount)}\n`;
+        body += `   Kategori: ${t.category_name || 'Tanpa kategori'}\n`;
+        if (t.description) body += `   Deskripsi: ${t.description}\n`;
+        body += `\n`;
       });
-      if (transactions.length > 15) body += `... dan ${transactions.length - 15} transaksi lainnya\n`;
       
-      body += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+      // ========== FOOTER ==========
+      body += `\n${'━'.repeat(40)}\n`;
+      body += `Backup dibuat pada: ${new Date().toLocaleString('id-ID')}\n`;
       body += `Dikirim dari ${APP_NAME} v${APP_VERSION}\n`;
+      body += `\n⚠️ SIMPAN EMAIL INI SEBAGAI BACKUP DATA ANDA\n`;
       
       await MailComposer.composeAsync({
-        subject: `[${APP_NAME}] Backup Data - ${dateStr}`,
+        subject: `[${APP_NAME}] Backup Data Lengkap - ${dateStr}`,
         body: body,
       });
       
-    } catch (error) {
-      Alert.alert('Gagal', 'Tidak dapat mengirim email');
+    } catch (error: any) {
+      console.error('Backup error:', error);
+      Alert.alert('Gagal Backup', `Error: ${error?.message || 'Tidak dapat mengirim email backup'}`);
     }
   };
   

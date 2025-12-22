@@ -59,7 +59,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
         <View style={styles.headerContent}>
-          <Text style={styles.greeting}>Selamat Datang! 👋</Text>
+          <Text style={styles.greeting}>Selamat Datang, Achmal! 👋</Text>
           <Text style={styles.dayName}>{dayName}</Text>
           <Text style={styles.date}>{dateFormatted}</Text>
         </View>
