@@ -19,6 +19,7 @@ export interface Schedule {
     recurrence_end_type: RecurrenceEndType;
     recurrence_end_date: string | null;
     recurrence_end_count: number | null;
+    exception_dates: string[] | null; // Dates to exclude from recurrence (YYYY-MM-DD format)
     location: string | null;
     color: string;
     created_at: string;
@@ -50,7 +51,9 @@ export interface CreateScheduleInput {
     color?: string;
 }
 
-export interface UpdateScheduleInput extends Partial<CreateScheduleInput> { }
+export interface UpdateScheduleInput extends Partial<CreateScheduleInput> {
+    exception_dates?: string[];
+}
 
 export interface CreateScheduleLinkInput {
     schedule_id: number;

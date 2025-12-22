@@ -142,6 +142,7 @@ export const initializeDatabase = async (): Promise<void> => {
         { name: 'recurrence_end_type', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_type TEXT DEFAULT 'never'" },
         { name: 'recurrence_end_date', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_date TEXT DEFAULT NULL" },
         { name: 'recurrence_end_count', sql: "ALTER TABLE schedules ADD COLUMN recurrence_end_count INTEGER DEFAULT NULL" },
+        { name: 'exception_dates', sql: "ALTER TABLE schedules ADD COLUMN exception_dates TEXT DEFAULT NULL" },
       ];
 
       for (const col of missingColumns) {
@@ -219,6 +220,15 @@ export const initializeDatabase = async (): Promise<void> => {
       value TEXT NOT NULL
     );
 
+    -- Custom types table (for reusable custom types in tasks and schedules)
+    CREATE TABLE IF NOT EXISTS custom_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('TASK', 'SCHEDULE')),
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      UNIQUE(name, entity_type)
+    );
+
     -- Schedules table (jadwal kuliah, UTS/UAS, custom)
     CREATE TABLE IF NOT EXISTS schedules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -236,6 +246,7 @@ export const initializeDatabase = async (): Promise<void> => {
       recurrence_end_type TEXT DEFAULT 'never' CHECK(recurrence_end_type IN ('never', 'date', 'count')),
       recurrence_end_date TEXT DEFAULT NULL,
       recurrence_end_count INTEGER DEFAULT NULL,
+      exception_dates TEXT DEFAULT NULL,
       location TEXT,
       color TEXT DEFAULT '#6366F1',
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
@@ -346,6 +357,43 @@ export const initializeDatabase = async (): Promise<void> => {
     `);
   }
 
+  // Migrate existing custom types from tasks and schedules
+  try {
+    // Get unique custom types from tasks
+    const taskCustomTypes = await db.getAllAsync(
+      "SELECT DISTINCT custom_type FROM tasks WHERE type = 'CUSTOM' AND custom_type IS NOT NULL AND custom_type != ''"
+    ) as { custom_type: string }[];
+
+    // Get unique custom types from schedules
+    const scheduleCustomTypes = await db.getAllAsync(
+      "SELECT DISTINCT custom_type FROM schedules WHERE type = 'CUSTOM' AND custom_type IS NOT NULL AND custom_type != ''"
+    ) as { custom_type: string }[];
+
+    // Insert task custom types (ignore if already exists)
+    for (const item of taskCustomTypes) {
+      if (item && item.custom_type && typeof item.custom_type === 'string') {
+        await db.runAsync(
+          'INSERT OR IGNORE INTO custom_types (name, entity_type) VALUES (?, ?)',
+          [item.custom_type.trim(), 'TASK']
+        );
+      }
+    }
+
+    // Insert schedule custom types (ignore if already exists)  
+    for (const item of scheduleCustomTypes) {
+      if (item && item.custom_type && typeof item.custom_type === 'string') {
+        await db.runAsync(
+          'INSERT OR IGNORE INTO custom_types (name, entity_type) VALUES (?, ?)',
+          [item.custom_type.trim(), 'SCHEDULE']
+        );
+      }
+    }
+
+    console.log('Migration: Custom types migrated successfully');
+  } catch (e) {
+    console.log('Custom types migration skipped:', e);
+  }
+
   console.log('Database initialized successfully');
 };
 
@@ -359,6 +407,7 @@ export const resetDatabase = async (): Promise<void> => {
 
   const db = await getDatabase();
   await db.execAsync(`
+    DROP TABLE IF EXISTS custom_types;
     DROP TABLE IF EXISTS logbook_entries;
     DROP TABLE IF EXISTS notifications;
     DROP TABLE IF EXISTS task_links;

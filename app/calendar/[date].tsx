@@ -6,8 +6,9 @@ import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { formatTanggal, NAMA_HARI } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +34,55 @@ export default function CalendarDayDetailScreen() {
   const isToday = new Date().toISOString().split('T')[0] === date;
   const currentHour = new Date().getHours();
   const currentMinute = new Date().getMinutes();
+  
+  // Swipe navigation helpers
+  const getAdjacentDate = (offset: number): string => {
+    const d = new Date(date + 'T12:00:00'); // Use noon to avoid timezone edge cases
+    d.setDate(d.getDate() + offset);
+    // Format as YYYY-MM-DD using local date components
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const navigateToDate = (newDate: string) => {
+    router.replace(`/calendar/${newDate}`);
+  };
+  
+  const goToPreviousDay = () => navigateToDate(getAdjacentDate(-1));
+  const goToNextDay = () => navigateToDate(getAdjacentDate(1));
+  
+  // Track if navigation is in progress to prevent double navigation
+  const isNavigating = useRef(false);
+  
+  // Simple swipe gesture handler (no animation, just navigation)
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      // Only respond to horizontal swipes with significant movement
+      const isHorizontalSwipe = Math.abs(gestureState.dx) > 50 && 
+                                 Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
+      return isHorizontalSwipe;
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (isNavigating.current) return;
+      
+      const swipeThreshold = 100;
+      
+      if (gestureState.dx > swipeThreshold) {
+        // Swipe RIGHT = go to PREVIOUS day (like flipping calendar pages backward)
+        isNavigating.current = true;
+        goToPreviousDay();
+        setTimeout(() => { isNavigating.current = false; }, 500);
+      } else if (gestureState.dx < -swipeThreshold) {
+        // Swipe LEFT = go to NEXT day (like flipping calendar pages forward)
+        isNavigating.current = true;
+        goToNextDay();
+        setTimeout(() => { isNavigating.current = false; }, 500);
+      }
+    },
+  }), [date]);
   
   // Auto-refresh when screen comes into focus (e.g., after editing/deleting)
   useFocusEffect(
@@ -63,19 +113,163 @@ export default function CalendarDayDetailScreen() {
     };
   };
   
+  // Convert time to minutes from midnight for easier comparison
+  const timeToMinutes = (schedule: Schedule): { start: number; end: number } => {
+    const start = parseTime(schedule.start_time);
+    const end = schedule.end_time ? parseTime(schedule.end_time) : { hour: start.hour + 1, minute: start.minute };
+    return {
+      start: start.hour * 60 + start.minute,
+      end: end.hour * 60 + end.minute
+    };
+  };
+  
+  // Check if two schedules overlap
+  const schedulesOverlap = (a: Schedule, b: Schedule): boolean => {
+    const timeA = timeToMinutes(a);
+    const timeB = timeToMinutes(b);
+    return timeA.start < timeB.end && timeB.start < timeA.end;
+  };
+  
+  // Calculate column layout for overlapping schedules
+  const getScheduleLayout = (schedules: Schedule[]): Map<number, { columnIndex: number; totalColumns: number }> => {
+    const layout = new Map<number, { columnIndex: number; totalColumns: number }>();
+    
+    // Sort schedules by start time
+    const sorted = [...schedules].sort((a, b) => {
+      const timeA = timeToMinutes(a);
+      const timeB = timeToMinutes(b);
+      return timeA.start - timeB.start;
+    });
+    
+    // Group overlapping schedules
+    const groups: Schedule[][] = [];
+    
+    for (const schedule of sorted) {
+      // Find a group this schedule overlaps with
+      let foundGroup = false;
+      for (const group of groups) {
+        if (group.some(s => schedulesOverlap(s, schedule))) {
+          group.push(schedule);
+          foundGroup = true;
+          break;
+        }
+      }
+      if (!foundGroup) {
+        groups.push([schedule]);
+      }
+    }
+    
+    // Merge overlapping groups
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        if (groups[i].some(a => groups[j].some(b => schedulesOverlap(a, b)))) {
+          groups[i] = [...groups[i], ...groups[j]];
+          groups.splice(j, 1);
+          j--;
+        }
+      }
+    }
+    
+    // Assign columns within each group
+    for (const group of groups) {
+      const columns: Schedule[][] = [];
+      
+      for (const schedule of group) {
+        // Find first column where this schedule doesn't overlap with existing
+        let placed = false;
+        for (let col = 0; col < columns.length; col++) {
+          const canPlace = !columns[col].some(s => schedulesOverlap(s, schedule));
+          if (canPlace) {
+            columns[col].push(schedule);
+            layout.set(schedule.id, { columnIndex: col, totalColumns: 0 });
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          columns.push([schedule]);
+          layout.set(schedule.id, { columnIndex: columns.length - 1, totalColumns: 0 });
+        }
+      }
+      
+      // Update total columns for all schedules in group
+      const totalCols = columns.length;
+      for (const schedule of group) {
+        const existing = layout.get(schedule.id);
+        if (existing) {
+          layout.set(schedule.id, { ...existing, totalColumns: totalCols });
+        }
+      }
+    }
+    
+    return layout;
+  };
+  
+  // Memoize layout calculation
+  const scheduleLayoutMap = getScheduleLayout(daySchedules);
+  
   // Calculate position and height for schedule block
+  // Handles cross-day schedules (e.g., 23:00-01:00)
   const getScheduleStyle = (schedule: Schedule) => {
     const start = parseTime(schedule.start_time);
     const end = schedule.end_time ? parseTime(schedule.end_time) : { hour: start.hour + 1, minute: start.minute };
     
-    const topOffset = (start.hour * HOUR_HEIGHT) + (start.minute / 60) * HOUR_HEIGHT;
-    const duration = (end.hour - start.hour) + (end.minute - start.minute) / 60;
+    // Check if this is a cross-day schedule (end time before start time)
+    const isCrossDay = schedule.end_time && (end.hour < start.hour || (end.hour === start.hour && end.minute < start.minute));
+    
+    // Check if this schedule is a cross-midnight continuation from yesterday
+    // For recurring schedules, we should NOT compare the original start_time date
+    // because the schedule repeats on different days. We only consider it "from previous day"
+    // if it's a cross-midnight schedule that starts the previous day and ends today.
+    // 
+    // The scheduleService already handles fetching cross-midnight schedules from yesterday,
+    // and we can detect those by checking if:
+    // 1. It's a cross-day schedule (end time < start time)
+    // 2. AND the start time would be for the previous day in the context of the viewed date
+    //
+    // For recurring schedules shown on this date, they always start at their scheduled time.
+    // The isFromPreviousDay should only be true for cross-midnight schedules from yesterday.
+    
+    let isFromPreviousDay = false;
+    
+    // Only non-recurring schedules can be "from previous day" based on their actual date
+    // Recurring schedules are always considered as "for this day" when shown on a specific date
+    if (schedule.recurrence_type === 'none') {
+      const scheduleStartDate = new Date(schedule.start_time);
+      const scheduleLocalDate = `${scheduleStartDate.getFullYear()}-${String(scheduleStartDate.getMonth() + 1).padStart(2, '0')}-${String(scheduleStartDate.getDate()).padStart(2, '0')}`;
+      isFromPreviousDay = scheduleLocalDate !== date;
+    }
+    
+    let effectiveStartHour = start.hour;
+    let effectiveStartMinute = start.minute;
+    let effectiveEndHour = end.hour;
+    let effectiveEndMinute = end.minute;
+    
+    if (isFromPreviousDay) {
+      // Schedule from previous day - show from 00:00 to end time
+      effectiveStartHour = 0;
+      effectiveStartMinute = 0;
+    } else if (isCrossDay) {
+      // Schedule starts today and crosses midnight - show from start to 24:00
+      effectiveEndHour = 24;
+      effectiveEndMinute = 0;
+    }
+    
+    const topOffset = (effectiveStartHour * HOUR_HEIGHT) + (effectiveStartMinute / 60) * HOUR_HEIGHT;
+    const duration = (effectiveEndHour - effectiveStartHour) + (effectiveEndMinute - effectiveStartMinute) / 60;
     const height = Math.max(duration * HOUR_HEIGHT, 30); // Minimum 30px height
+    
+    // Get column layout for side-by-side display
+    const layoutInfo = scheduleLayoutMap.get(schedule.id) || { columnIndex: 0, totalColumns: 1 };
+    const widthPercent = 100 / layoutInfo.totalColumns;
+    const leftPercent = layoutInfo.columnIndex * widthPercent;
     
     return {
       top: topOffset,
       height,
       backgroundColor: schedule.color || colors.info,
+      width: `${widthPercent - 1}%` as any, // -1% for gap between columns
+      left: `${leftPercent}%` as any,
     };
   };
   
@@ -113,12 +307,22 @@ export default function CalendarDayDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={[styles.dayName, { color: colors.textPrimary }]}>
-            {NAMA_HARI[dayOfWeek]}
-          </Text>
-          <Text style={[styles.dateText, { color: colors.textSecondary }]}>
-            {formatTanggal(date + 'T00:00:00')}
-          </Text>
+          <View style={styles.dayNavigation}>
+            <TouchableOpacity onPress={goToPreviousDay} style={styles.navButton}>
+              <Ionicons name="chevron-back" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <View style={styles.dayInfo}>
+              <Text style={[styles.dayName, { color: colors.textPrimary }]}>
+                {NAMA_HARI[dayOfWeek]}
+              </Text>
+              <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                {formatTanggal(date + 'T00:00:00')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={goToNextDay} style={styles.navButton}>
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -142,7 +346,10 @@ export default function CalendarDayDetailScreen() {
                 </Text>
                 {task.deadline && (
                   <Text style={[styles.deadlineTime, { color: colors.textMuted }]}>
-                    {task.deadline.split('T')[1]?.substring(0, 5) || 'Seharian'}
+                    {(() => {
+                      const deadlineDate = new Date(task.deadline);
+                      return `${String(deadlineDate.getHours()).padStart(2, '0')}:${String(deadlineDate.getMinutes()).padStart(2, '0')}`;
+                    })() || 'Seharian'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -151,9 +358,10 @@ export default function CalendarDayDetailScreen() {
         </View>
       )}
       
-      {/* Timeline */}
-      <ScrollView style={styles.timelineContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.timeline}>
+      {/* Timeline - with swipe gesture handler */}
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+        <ScrollView style={styles.timelineContainer} showsVerticalScrollIndicator={false}>
+          <View style={styles.timeline}>
           {/* Hour labels and lines */}
           {HOURS.map(hour => (
             <View key={hour} style={[styles.hourRow, { height: HOUR_HEIGHT }]}>
@@ -188,7 +396,7 @@ export default function CalendarDayDetailScreen() {
                 <TouchableOpacity
                   key={schedule.id}
                   style={[styles.scheduleBlock, scheduleStyle]}
-                  onPress={() => router.push(`/schedule/${schedule.id}`)}
+                  onPress={() => router.push(`/schedule/${schedule.id}?contextDate=${date}`)}
                   activeOpacity={0.8}
                 >
                   {isCompact ? (
@@ -221,14 +429,15 @@ export default function CalendarDayDetailScreen() {
                       )}
                     </>
                   )}
-                </TouchableOpacity>
+            </TouchableOpacity>
               );
             })}
           </View>
         </View>
         
         <View style={{ height: 100 }} />
-      </ScrollView>
+        </ScrollView>
+      </View>
       
       {/* FAB */}
       <TouchableOpacity
@@ -259,6 +468,18 @@ const styles = StyleSheet.create({
   headerContent: {
     flex: 1,
     alignItems: 'center',
+  },
+  dayNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  navButton: {
+    padding: 8,
+  },
+  dayInfo: {
+    alignItems: 'center',
+    minWidth: 150,
   },
   dayName: {
     fontSize: 20,
@@ -354,8 +575,6 @@ const styles = StyleSheet.create({
   },
   scheduleBlock: {
     position: 'absolute',
-    left: 0,
-    right: 0,
     borderRadius: 8,
     padding: 8,
     overflow: 'hidden',

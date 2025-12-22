@@ -1,5 +1,6 @@
 // Re-export all models
 export * from './category';
+export * from './customType';
 export * from './finance';
 export * from './logbook';
 export * from './note';

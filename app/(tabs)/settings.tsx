@@ -8,7 +8,8 @@ import { useAppStore } from '@/src/store/appStore';
 import { APP_NAME, APP_VERSION, COLORS, DARK_COLORS } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import * as MailComposer from 'expo-mail-composer';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     Modal,
@@ -26,7 +27,13 @@ export default function SettingsScreen() {
   
   const { tasks, notes, schedules, refreshTaskData, fetchNotes, fetchSchedules } = useAppStore();
   
-  // Password states
+  // Auth state for settings access
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [showAuthPasswordPrompt, setShowAuthPasswordPrompt] = useState(false);
+  const [biometricName, setBiometricName] = useState('Biometric');
+  
+  // Password states for managing passwords
   const [hasNotePassword, setHasNotePassword] = useState(false);
   const [hasFinancePassword, setHasFinancePassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -38,9 +45,64 @@ export default function SettingsScreen() {
   // Reset confirmation
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   
+  // Check auth when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        checkAuth();
+      }
+    }, [isAuthenticated])
+  );
+  
   useEffect(() => {
-    checkPasswords();
-  }, []);
+    if (isAuthenticated) {
+      checkPasswords();
+    }
+  }, [isAuthenticated]);
+  
+  // Auth functions
+  const checkAuth = async () => {
+    const preferredMethod = await authService.getPreferredAuthMethod();
+    
+    if (preferredMethod === 'none') {
+      // No auth required, allow access
+      setIsAuthenticated(true);
+      return;
+    }
+    
+    if (preferredMethod === 'biometric') {
+      const bioName = await authService.getBiometricType();
+      setBiometricName(bioName);
+      await authenticateWithBiometric();
+    } else {
+      setShowAuthPasswordPrompt(true);
+    }
+  };
+  
+  const authenticateWithBiometric = async () => {
+    setIsAuthenticating(true);
+    const result = await authService.authenticateWithBiometric();
+    setIsAuthenticating(false);
+    
+    if (result.success) {
+      setIsAuthenticated(true);
+    } else if (result.error !== 'Dibatalkan') {
+      // Try password fallback
+      const hasPass = await authService.hasFinancePassword();
+      if (hasPass) {
+        setShowAuthPasswordPrompt(true);
+      }
+    }
+  };
+  
+  const handleAuthPasswordSubmit = async (password: string): Promise<boolean> => {
+    const valid = await authService.verifyFinancePassword(password);
+    if (valid) {
+      setIsAuthenticated(true);
+      return true;
+    }
+    return false;
+  };
   
   const checkPasswords = async () => {
     const [notePass, financePass] = await Promise.all([
@@ -291,6 +353,47 @@ export default function SettingsScreen() {
     </TouchableOpacity>
   );
 
+  // Lock Screen - show when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <View style={[styles.lockContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.lockCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.lockIconContainer, { backgroundColor: colors.primary + '20' }]}>
+            <Ionicons name="settings" size={48} color={colors.primary} />
+          </View>
+          <Text style={[styles.lockTitle, { color: colors.textPrimary }]}>
+            Pengaturan Terkunci
+          </Text>
+          <Text style={[styles.lockSubtitle, { color: colors.textMuted }]}>
+            Verifikasi identitas untuk mengakses pengaturan
+          </Text>
+          
+          <TouchableOpacity
+            style={[styles.unlockButton, { backgroundColor: colors.primary }]}
+            onPress={checkAuth}
+            disabled={isAuthenticating}
+          >
+            <Ionicons 
+              name="finger-print" 
+              size={22} 
+              color={colors.textInverse} 
+            />
+            <Text style={[styles.unlockButtonText, { color: colors.textInverse }]}>
+              {isAuthenticating ? 'Memverifikasi...' : `Buka dengan ${biometricName}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <PasswordPrompt
+          visible={showAuthPasswordPrompt}
+          onClose={() => setShowAuthPasswordPrompt(false)}
+          onSubmit={handleAuthPasswordSubmit}
+          title="Masukkan Sandi"
+        />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* App Info */}
@@ -489,6 +592,48 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  lockContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  lockCard: {
+    width: '100%',
+    padding: 32,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  lockIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  lockTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  lockSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  unlockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  unlockButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   appInfo: {
     alignItems: 'center',

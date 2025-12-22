@@ -25,6 +25,22 @@ const serializeRecurrenceDays = (days: number[] | null | undefined): string | nu
     return JSON.stringify(days);
 };
 
+// Helper to parse exception_dates from DB (stored as JSON string)
+const parseExceptionDates = (dates: string | null): string[] | null => {
+    if (!dates) return null;
+    try {
+        return JSON.parse(dates);
+    } catch {
+        return null;
+    }
+};
+
+// Helper to serialize exception_dates for DB
+const serializeExceptionDates = (dates: string[] | null | undefined): string | null => {
+    if (!dates || dates.length === 0) return null;
+    return JSON.stringify(dates);
+};
+
 // Transform raw DB row to Schedule object
 const transformSchedule = (s: any): Schedule => ({
     ...s,
@@ -33,6 +49,7 @@ const transformSchedule = (s: any): Schedule => ({
     recurrence_type: s.recurrence_type || 'none',
     recurrence_interval: s.recurrence_interval || 1,
     recurrence_end_type: s.recurrence_end_type || 'never',
+    exception_dates: parseExceptionDates(s.exception_dates),
 });
 
 export const getAllSchedules = async (): Promise<Schedule[]> => {
@@ -72,6 +89,14 @@ const shouldOccurOnDate = (schedule: Schedule, targetDate: Date): boolean => {
     const startDate = new Date(schedule.start_time);
     const targetDateOnly = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+
+    // Format target date as YYYY-MM-DD for exception check
+    const targetDateStr = `${targetDateOnly.getFullYear()}-${String(targetDateOnly.getMonth() + 1).padStart(2, '0')}-${String(targetDateOnly.getDate()).padStart(2, '0')}`;
+
+    // Check if this date is excluded
+    if (schedule.exception_dates && schedule.exception_dates.includes(targetDateStr)) {
+        return false;
+    }
 
     // Check end conditions
     if (schedule.recurrence_end_type === 'date' && schedule.recurrence_end_date) {
@@ -142,7 +167,35 @@ export const getSchedulesForDate = async (date: string): Promise<Schedule[]> => 
     const transformed = schedules.map(transformSchedule);
 
     // Filter schedules that should occur on this date
-    return transformed.filter(s => shouldOccurOnDate(s, targetDate));
+    const schedulesForDate = transformed.filter(s => shouldOccurOnDate(s, targetDate));
+
+    // Also check for schedules from previous day that cross midnight into this day
+    const previousDate = new Date(targetDate);
+    previousDate.setDate(previousDate.getDate() - 1);
+
+    const previousDaySchedules = transformed.filter(s => {
+        if (!shouldOccurOnDate(s, previousDate)) return false;
+        if (!s.end_time) return false;
+
+        // Check if end time is less than start time (crosses midnight)
+        const startDate = new Date(s.start_time);
+        const endDate = new Date(s.end_time);
+        const startHour = startDate.getHours();
+        const endHour = endDate.getHours();
+
+        // If end hour < start hour, it crosses midnight
+        return endHour < startHour;
+    });
+
+    // Combine and deduplicate by ID
+    const allSchedules = [...schedulesForDate];
+    for (const ps of previousDaySchedules) {
+        if (!allSchedules.some(s => s.id === ps.id)) {
+            allSchedules.push(ps);
+        }
+    }
+
+    return allSchedules;
 };
 
 export const getUpcomingSchedules = async (days: number = 7): Promise<Schedule[]> => {
@@ -290,6 +343,38 @@ export const updateSchedule = async (id: number, input: UpdateScheduleInput): Pr
 export const deleteSchedule = async (id: number): Promise<void> => {
     const db = await getDatabase();
     await db.runAsync('DELETE FROM schedules WHERE id = ?', [id]);
+};
+
+// Add exception date (delete only this occurrence)
+export const addExceptionDate = async (id: number, date: string): Promise<void> => {
+    const db = await getDatabase();
+    const schedule = await getScheduleById(id);
+    if (!schedule) return;
+
+    const currentExceptions = schedule.exception_dates || [];
+    if (!currentExceptions.includes(date)) {
+        currentExceptions.push(date);
+    }
+
+    await db.runAsync(
+        'UPDATE schedules SET exception_dates = ? WHERE id = ?',
+        [serializeExceptionDates(currentExceptions), id]
+    );
+};
+
+// Delete this and future occurrences (set recurrence_end_date to day before)
+export const deleteRecurringFromDate = async (id: number, date: string): Promise<void> => {
+    const db = await getDatabase();
+
+    // Calculate the day before the given date
+    const targetDate = new Date(date + 'T12:00:00');
+    targetDate.setDate(targetDate.getDate() - 1);
+    const endDate = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
+    await db.runAsync(
+        'UPDATE schedules SET recurrence_end_type = ?, recurrence_end_date = ? WHERE id = ?',
+        ['date', endDate, id]
+    );
 };
 
 // Schedule Links CRUD

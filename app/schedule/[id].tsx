@@ -6,6 +6,7 @@ import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS, RECURRENCE_TYPE_OPTIONS } from '@/src/utils/constants';
 import {
     formatTanggalWaktu,
+    formatWaktu,
     getScheduleTypeLabel,
     NAMA_HARI
 } from '@/src/utils/dateUtils';
@@ -24,7 +25,7 @@ import {
 
 export default function ScheduleDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, contextDate } = useLocalSearchParams<{ id: string; contextDate?: string }>();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
@@ -55,26 +56,95 @@ export default function ScheduleDetailScreen() {
   }, [id]);
   
   const handleDelete = () => {
-    Alert.alert(
-      'Hapus Jadwal',
-      `Apakah Anda yakin ingin menghapus jadwal "${schedule?.title}"?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        { 
-          text: 'Hapus', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await scheduleService.deleteSchedule(parseInt(id!));
-              await fetchSchedules();
-              router.back();
-            } catch (error) {
-              Alert.alert('Error', 'Gagal menghapus jadwal');
+    if (!schedule) return;
+    
+    // Check if this is a recurring schedule
+    const isRecurring = schedule.recurrence_type !== 'none';
+    
+    if (isRecurring) {
+      // Show 3 options for recurring schedules
+      Alert.alert(
+        'Hapus Jadwal Berulang',
+        `Pilih opsi hapus untuk "${schedule.title}"`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          {
+            text: 'Jadwal ini saja',
+            onPress: async () => {
+              try {
+                // Use contextDate if available (from calendar), otherwise today
+                let dateStr: string;
+                if (contextDate) {
+                  dateStr = contextDate;
+                } else {
+                  const today = new Date();
+                  dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                }
+                await scheduleService.addExceptionDate(parseInt(id!), dateStr);
+                await fetchSchedules();
+                router.back();
+              } catch (error) {
+                Alert.alert('Error', 'Gagal menghapus jadwal');
+              }
+            }
+          },
+          {
+            text: 'Jadwal ini & berikutnya',
+            onPress: async () => {
+              try {
+                let dateStr: string;
+                if (contextDate) {
+                  dateStr = contextDate;
+                } else {
+                  const today = new Date();
+                  dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                }
+                await scheduleService.deleteRecurringFromDate(parseInt(id!), dateStr);
+                await fetchSchedules();
+                router.back();
+              } catch (error) {
+                Alert.alert('Error', 'Gagal menghapus jadwal');
+              }
+            }
+          },
+          {
+            text: 'Semua jadwal',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await scheduleService.deleteSchedule(parseInt(id!));
+                await fetchSchedules();
+                router.back();
+              } catch (error) {
+                Alert.alert('Error', 'Gagal menghapus jadwal');
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // Non-recurring: simple delete confirmation
+      Alert.alert(
+        'Hapus Jadwal',
+        `Apakah Anda yakin ingin menghapus jadwal "${schedule.title}"?`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          { 
+            text: 'Hapus', 
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await scheduleService.deleteSchedule(parseInt(id!));
+                await fetchSchedules();
+                router.back();
+              } catch (error) {
+                Alert.alert('Error', 'Gagal menghapus jadwal');
+              }
+            }
+          }
+        ]
+      );
+    }
   };
 
   const openLink = async (url: string) => {
@@ -208,7 +278,7 @@ export default function ScheduleDetailScreen() {
             </Text>
             <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
               {schedule.recurrence_type !== 'none'
-                ? `${schedule.start_time.split('T')[1]?.substring(0, 5) || ''}${schedule.end_time ? ` - ${schedule.end_time.split('T')[1]?.substring(0, 5) || ''}` : ''}`
+                ? `${formatWaktu(schedule.start_time)}${schedule.end_time ? ` - ${formatWaktu(schedule.end_time)}` : ''}`
                 : formatTanggalWaktu(schedule.start_time)
               }
             </Text>

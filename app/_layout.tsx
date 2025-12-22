@@ -85,6 +85,13 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
+          name="task/edit/[id]" 
+          options={{ 
+            title: 'Edit Tugas',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
           name="note/[id]" 
           options={{ 
             title: 'Detail Catatan',
@@ -157,7 +164,7 @@ function RootLayoutNav() {
         <Stack.Screen 
           name="calendar/[date]" 
           options={{ 
-            title: 'Detail Hari',
+            headerShown: false,
             presentation: 'card' 
           }} 
         />

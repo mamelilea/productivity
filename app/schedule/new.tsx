@@ -2,7 +2,8 @@ import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
 import { CustomReminderInput, RecurrencePickerModal } from '@/src/components';
 import { RecurrenceSettings } from '@/src/components/RecurrencePickerModal';
-import { RecurrenceType, ScheduleType } from '@/src/models';
+import { CustomType, RecurrenceType, ScheduleType } from '@/src/models';
+import * as customTypeService from '@/src/services/customTypeService';
 import * as notificationService from '@/src/services/notificationService';
 import * as scheduleService from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
@@ -57,6 +58,15 @@ export default function NewScheduleScreen() {
     };
   }, []);
   
+  // Load saved custom types
+  useEffect(() => {
+    const loadCustomTypes = async () => {
+      const types = await customTypeService.getCustomTypes('SCHEDULE');
+      setSavedCustomTypes(types);
+    };
+    loadCustomTypes();
+  }, []);
+  
   const scrollToBottom = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -67,6 +77,8 @@ export default function NewScheduleScreen() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<ScheduleType>('KULIAH');
   const [customType, setCustomType] = useState('');
+  const [savedCustomTypes, setSavedCustomTypes] = useState<CustomType[]>([]);
+  const [showNewCustomTypeInput, setShowNewCustomTypeInput] = useState(false);
   const [description, setDescription] = useState('');
   const [startTimeDate, setStartTimeDate] = useState<Date | null>(null);
   const [endTimeDate, setEndTimeDate] = useState<Date | null>(null);
@@ -137,6 +149,14 @@ export default function NewScheduleScreen() {
           schedule_id: scheduleId,
           url: link.url,
           label: link.label || undefined,
+        });
+      }
+      
+      // Save new custom type for future reuse
+      if (type === 'CUSTOM' && customType.trim() && showNewCustomTypeInput) {
+        await customTypeService.addCustomType({
+          name: customType.trim(),
+          entity_type: 'SCHEDULE',
         });
       }
       
@@ -267,18 +287,87 @@ export default function NewScheduleScreen() {
         
         {/* Custom Type Input */}
         {type === 'CUSTOM' && (
-          <TextInput
-            style={[styles.input, { 
-              backgroundColor: colors.surface, 
-              color: colors.textPrimary,
-              borderColor: colors.border,
-              marginTop: 12,
-            }]}
-            placeholder="Ketik tipe jadwal..."
-            placeholderTextColor={colors.textMuted}
-            value={customType}
-            onChangeText={setCustomType}
-          />
+          <View style={{ marginTop: 12 }}>
+            {/* Saved Custom Types as chips */}
+            {savedCustomTypes.length > 0 && (
+              <View style={styles.optionRow}>
+                {savedCustomTypes.map(ct => (
+                  <TouchableOpacity
+                    key={ct.id}
+                    style={[
+                      styles.optionButton,
+                      { 
+                        backgroundColor: customType === ct.name && !showNewCustomTypeInput 
+                          ? colors.secondary 
+                          : colors.surfaceVariant,
+                        borderColor: customType === ct.name && !showNewCustomTypeInput 
+                          ? colors.secondary 
+                          : colors.border,
+                      }
+                    ]}
+                    onPress={() => {
+                      setCustomType(ct.name);
+                      setShowNewCustomTypeInput(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.optionButtonText,
+                      { color: customType === ct.name && !showNewCustomTypeInput 
+                        ? colors.textInverse 
+                        : colors.textSecondary }
+                    ]}>
+                      {ct.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {/* Add new button */}
+                <TouchableOpacity
+                  style={[
+                    styles.optionButton,
+                    { 
+                      backgroundColor: showNewCustomTypeInput ? colors.accent : colors.surfaceVariant,
+                      borderColor: showNewCustomTypeInput ? colors.accent : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    }
+                  ]}
+                  onPress={() => {
+                    setShowNewCustomTypeInput(true);
+                    setCustomType('');
+                  }}
+                >
+                  <Ionicons 
+                    name="add" 
+                    size={14} 
+                    color={showNewCustomTypeInput ? colors.textInverse : colors.textSecondary} 
+                  />
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: showNewCustomTypeInput ? colors.textInverse : colors.textSecondary }
+                  ]}>
+                    Baru
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Text input for new custom type */}
+            {(savedCustomTypes.length === 0 || showNewCustomTypeInput) && (
+              <TextInput
+                style={[styles.input, { 
+                  backgroundColor: colors.surface, 
+                  color: colors.textPrimary,
+                  borderColor: colors.border,
+                  marginTop: savedCustomTypes.length > 0 ? 12 : 0,
+                }]}
+                placeholder="Ketik tipe jadwal baru..."
+                placeholderTextColor={colors.textMuted}
+                value={customType}
+                onChangeText={setCustomType}
+              />
+            )}
+          </View>
         )}
       </View>
 

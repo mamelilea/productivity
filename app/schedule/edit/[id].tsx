@@ -5,7 +5,8 @@ import {
     RecurrencePickerModal
 } from '@/src/components';
 import { RecurrenceSettings } from '@/src/components/RecurrencePickerModal';
-import { RecurrenceType, ScheduleType } from '@/src/models';
+import { CustomType, RecurrenceType, ScheduleType } from '@/src/models';
+import * as customTypeService from '@/src/services/customTypeService';
 import * as scheduleService from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
 import {
@@ -46,6 +47,8 @@ export default function EditScheduleScreen() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<ScheduleType>('KULIAH');
   const [customType, setCustomType] = useState('');
+  const [savedCustomTypes, setSavedCustomTypes] = useState<CustomType[]>([]);
+  const [showNewCustomTypeInput, setShowNewCustomTypeInput] = useState(false);
   const [description, setDescription] = useState('');
   const [startTimeDate, setStartTimeDate] = useState<Date | null>(null);
   const [endTimeDate, setEndTimeDate] = useState<Date | null>(null);
@@ -68,7 +71,13 @@ export default function EditScheduleScreen() {
   
   useEffect(() => {
     loadSchedule();
+    loadCustomTypes();
   }, [id]);
+  
+  const loadCustomTypes = async () => {
+    const types = await customTypeService.getCustomTypes('SCHEDULE');
+    setSavedCustomTypes(types);
+  };
   
   const loadSchedule = async () => {
     if (!id) return;
@@ -79,6 +88,12 @@ export default function EditScheduleScreen() {
         setTitle(schedule.title);
         setType(schedule.type);
         setCustomType(schedule.custom_type || '');
+        // Check if custom type is from saved list or a new one
+        if (schedule.type === 'CUSTOM' && schedule.custom_type) {
+          const types = await customTypeService.getCustomTypes('SCHEDULE');
+          const isExistingType = types.some(t => t.name === schedule.custom_type);
+          setShowNewCustomTypeInput(!isExistingType);
+        }
         setDescription(schedule.description || '');
         setStartTimeDate(new Date(schedule.start_time));
         setEndTimeDate(schedule.end_time ? new Date(schedule.end_time) : null);
@@ -138,6 +153,14 @@ export default function EditScheduleScreen() {
         recurrence_end_count: recurrenceEndCount || undefined,
         color: selectedColor,
       });
+      
+      // Save new custom type for future reuse
+      if (type === 'CUSTOM' && customType.trim() && showNewCustomTypeInput) {
+        await customTypeService.addCustomType({
+          name: customType.trim(),
+          entity_type: 'SCHEDULE',
+        });
+      }
       
       // Handle links - add new ones
       for (const link of links) {
@@ -271,12 +294,83 @@ export default function EditScheduleScreen() {
             Tipe Jadwal
           </Text>
           <View style={styles.optionRow}>
-            {SCHEDULE_TYPE_OPTIONS.map(opt => 
-              renderOptionButton(opt.label, opt.value, type, () => setType(opt.value as ScheduleType))
+            {/* Standard type options (excluding CUSTOM) */}
+            {SCHEDULE_TYPE_OPTIONS.filter(opt => opt.value !== 'CUSTOM').map(opt => 
+              renderOptionButton(
+                opt.label, 
+                opt.value, 
+                type === 'CUSTOM' ? '' : type, 
+                () => {
+                  setType(opt.value as ScheduleType);
+                  setCustomType('');
+                  setShowNewCustomTypeInput(false);
+                }
+              )
             )}
+            
+            {/* Saved custom types as primary chips */}
+            {savedCustomTypes.map(ct => {
+              const isActive = type === 'CUSTOM' && customType === ct.name && !showNewCustomTypeInput;
+              return (
+                <TouchableOpacity
+                  key={ct.id}
+                  style={[
+                    styles.optionButton,
+                    { 
+                      backgroundColor: isActive ? colors.secondary : colors.surfaceVariant,
+                      borderColor: isActive ? colors.secondary : colors.border,
+                    }
+                  ]}
+                  onPress={() => {
+                    setType('CUSTOM');
+                    setCustomType(ct.name);
+                    setShowNewCustomTypeInput(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: isActive ? colors.textInverse : colors.textSecondary }
+                  ]}>
+                    {ct.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            
+            {/* "Tipe Lainnya" button for adding new custom type */}
+            <TouchableOpacity
+              style={[
+                styles.optionButton,
+                { 
+                  backgroundColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.surfaceVariant,
+                  borderColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.border,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                }
+              ]}
+              onPress={() => {
+                setType('CUSTOM');
+                setCustomType('');
+                setShowNewCustomTypeInput(true);
+              }}
+            >
+              <Ionicons 
+                name="add" 
+                size={14} 
+                color={(type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary} 
+              />
+              <Text style={[
+                styles.optionButtonText,
+                { color: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary }
+              ]}>
+                Tipe Lainnya
+              </Text>
+            </TouchableOpacity>
           </View>
           
-          {type === 'CUSTOM' && (
+          {/* Text input for new custom type (show only when adding new) */}
+          {type === 'CUSTOM' && showNewCustomTypeInput && (
             <TextInput
               style={[styles.input, { 
                 backgroundColor: colors.surface, 
@@ -284,7 +378,7 @@ export default function EditScheduleScreen() {
                 borderColor: colors.border,
                 marginTop: 12,
               }]}
-              placeholder="Ketik tipe jadwal..."
+              placeholder="Ketik tipe jadwal baru..."
               placeholderTextColor={colors.textMuted}
               value={customType}
               onChangeText={setCustomType}

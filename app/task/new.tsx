@@ -1,32 +1,33 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
 import { SimpleMarkdownInput } from '@/src/components';
-import { AssignmentType, Priority, TaskType } from '@/src/models';
+import { AssignmentType, CustomType, Priority, TaskType } from '@/src/models';
+import * as customTypeService from '@/src/services/customTypeService';
 import * as notificationService from '@/src/services/notificationService';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import {
-  ASSIGNMENT_TYPE_OPTIONS,
-  COLORS,
-  DARK_COLORS,
-  PRIORITY_OPTIONS,
-  REMINDER_PRESETS,
-  TASK_TYPE_OPTIONS
+    ASSIGNMENT_TYPE_OPTIONS,
+    COLORS,
+    DARK_COLORS,
+    PRIORITY_OPTIONS,
+    REMINDER_PRESETS,
+    TASK_TYPE_OPTIONS
 } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Keyboard,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Keyboard,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 export default function NewTaskScreen() {
@@ -49,6 +50,8 @@ export default function NewTaskScreen() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState<TaskType>('NON_KULIAH');
   const [customType, setCustomType] = useState('');
+  const [savedCustomTypes, setSavedCustomTypes] = useState<CustomType[]>([]);
+  const [showNewCustomTypeInput, setShowNewCustomTypeInput] = useState(false);
   const [priority, setPriority] = useState<Priority>('MEDIUM');
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
@@ -73,7 +76,13 @@ export default function NewTaskScreen() {
   
   useEffect(() => {
     fetchCategories();
+    loadSavedCustomTypes();
   }, []);
+  
+  const loadSavedCustomTypes = async () => {
+    const customTypes = await customTypeService.getCustomTypes('TASK');
+    setSavedCustomTypes(customTypes);
+  };
   
   // Keyboard listener untuk Android
   useEffect(() => {
@@ -116,6 +125,14 @@ export default function NewTaskScreen() {
         deadline: deadlineDate ? deadlineDate.toISOString() : undefined,
         is_today: isToday,
       });
+      
+      // Save new custom type for future reuse
+      if (type === 'CUSTOM' && customType.trim() && showNewCustomTypeInput) {
+        await customTypeService.addCustomType({
+          name: customType.trim(),
+          entity_type: 'TASK',
+        });
+      }
       
       // Add course detail if kuliah
       if (type === 'KULIAH') {
@@ -228,13 +245,80 @@ export default function NewTaskScreen() {
             Tipe Tugas
           </Text>
           <View style={styles.optionRow}>
-            {TASK_TYPE_OPTIONS.map(opt => 
-              renderOptionButton(opt.label, opt.value, type, () => setType(opt.value as TaskType))
+            {/* Standard type options (KULIAH and NON_KULIAH only) */}
+            {TASK_TYPE_OPTIONS.filter(opt => opt.value !== 'CUSTOM').map(opt => 
+              renderOptionButton(
+                opt.label, 
+                opt.value, 
+                type === 'CUSTOM' ? '' : type, 
+                () => {
+                  setType(opt.value as TaskType);
+                  setCustomType('');
+                  setShowNewCustomTypeInput(false);
+                }
+              )
             )}
+            
+            {/* Saved custom types as primary chips */}
+            {savedCustomTypes.map(ct => {
+              const isActive = type === 'CUSTOM' && customType === ct.name && !showNewCustomTypeInput;
+              return (
+                <TouchableOpacity
+                  key={ct.id}
+                  style={[
+                    styles.optionButton,
+                    { 
+                      backgroundColor: isActive ? colors.secondary : colors.surfaceVariant,
+                      borderColor: isActive ? colors.secondary : colors.border,
+                    }
+                  ]}
+                  onPress={() => {
+                    setType('CUSTOM');
+                    setCustomType(ct.name);
+                    setShowNewCustomTypeInput(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: isActive ? colors.textInverse : colors.textSecondary }
+                  ]}>
+                    {ct.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            
+            {/* "Tipe Lainnya" button for adding new custom type */}
+            <TouchableOpacity
+              style={[
+                styles.optionButton,
+                { 
+                  backgroundColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.surfaceVariant,
+                  borderColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.border,
+                }
+              ]}
+              onPress={() => {
+                setType('CUSTOM');
+                setCustomType('');
+                setShowNewCustomTypeInput(true);
+              }}
+            >
+              <Ionicons 
+                name="add" 
+                size={14} 
+                color={(type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary} 
+              />
+              <Text style={[
+                styles.optionButtonText,
+                { color: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary }
+              ]}>
+                Tipe Lainnya
+              </Text>
+            </TouchableOpacity>
           </View>
           
-          {/* Custom Type Input */}
-          {type === 'CUSTOM' && (
+          {/* Text input for new custom type (show only when adding new) */}
+          {type === 'CUSTOM' && showNewCustomTypeInput && (
             <TextInput
               style={[styles.input, { 
                 backgroundColor: colors.surface, 
@@ -242,7 +326,7 @@ export default function NewTaskScreen() {
                 borderColor: colors.border,
                 marginTop: 12,
               }]}
-              placeholder="Ketik tipe tugas..."
+              placeholder="Ketik tipe tugas baru..."
               placeholderTextColor={colors.textMuted}
               value={customType}
               onChangeText={setCustomType}
@@ -520,6 +604,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,

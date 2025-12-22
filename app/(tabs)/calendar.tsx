@@ -5,6 +5,7 @@ import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
 import {
     formatTanggal,
+    formatWaktu,
     NAMA_BULAN,
     NAMA_HARI
 } from '@/src/utils/dateUtils';
@@ -100,14 +101,70 @@ export default function CalendarScreen() {
     return tasks.some(t => t.deadline?.split('T')[0] === dateStr);
   };
   
+  // Helper to check if a schedule should occur on a specific date (full recurrence logic)
+  const shouldOccurOnDate = (schedule: Schedule, targetDate: Date): boolean => {
+    const startDate = new Date(schedule.start_time);
+    const targetDateOnly = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+
+    // Check end conditions
+    if (schedule.recurrence_end_type === 'date' && schedule.recurrence_end_date) {
+      const endDate = new Date(schedule.recurrence_end_date);
+      if (targetDateOnly > endDate) return false;
+    }
+
+    // Can't occur before start date
+    if (targetDateOnly < startDateOnly) return false;
+
+    const dayOfWeek = targetDate.getDay();
+    const interval = schedule.recurrence_interval || 1;
+    const recurrenceType = schedule.recurrence_type || 'none';
+
+    switch (recurrenceType) {
+      case 'none':
+        // Non-recurring: only on exact start date
+        return targetDateOnly.getTime() === startDateOnly.getTime();
+
+      case 'daily':
+        const daysDiff = Math.floor((targetDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+        return daysDiff % interval === 0;
+
+      case 'weekly':
+      case 'custom':
+        // Check if it's been the right number of weeks
+        const weeksDiff = Math.floor((targetDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24 * 7));
+        const isRightWeek = weeksDiff % interval === 0;
+        // Check if it's on one of the selected days
+        const recurrenceDays = schedule.recurrence_days || [startDate.getDay()];
+        const isRightDay = recurrenceDays.includes(dayOfWeek);
+        return isRightWeek && isRightDay;
+
+      case 'monthly':
+        const monthsDiff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 +
+          (targetDate.getMonth() - startDate.getMonth());
+        if (monthsDiff % interval !== 0) return false;
+        return targetDate.getDate() === startDate.getDate();
+
+      case 'yearly':
+        const yearsDiff = targetDate.getFullYear() - startDate.getFullYear();
+        if (yearsDiff % interval !== 0) return false;
+        return targetDate.getMonth() === startDate.getMonth() &&
+          targetDate.getDate() === startDate.getDate();
+
+      default:
+        return false;
+    }
+  };
+  
   const hasSchedule = (day: number): boolean => {
     const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    const dayOfWeek = date.getDay();
-    return schedules.some(s => {
-      if (s.is_recurring && s.day_of_week === dayOfWeek) return true;
-      if (!s.is_recurring && s.start_time.split('T')[0] === getDateString(day)) return true;
-      return false;
-    });
+    return schedules.some(s => shouldOccurOnDate(s, date));
+  };
+  
+  // Get count of schedules on a specific day (for multiple indicator dots)
+  const getScheduleCount = (day: number): number => {
+    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    return schedules.filter(s => shouldOccurOnDate(s, date)).length;
   };
   
   const navigateMonth = (direction: number) => {
@@ -154,11 +211,7 @@ export default function CalendarScreen() {
         {days.map((day, index) => (
           <TouchableOpacity
             key={index}
-            style={[
-              styles.dayCell,
-              day && isSelected(day) ? { backgroundColor: colors.primary } : null,
-              day && isToday(day) && !isSelected(day) ? { borderColor: colors.primary, borderWidth: 2 } : null
-            ]}
+            style={styles.dayCell}
             onPress={() => {
               if (day) {
                 const dateStr = getDateString(day);
@@ -170,22 +223,40 @@ export default function CalendarScreen() {
           >
             {day && (
               <>
-                <Text style={[
-                  styles.dayText,
-                  { color: isSelected(day) ? colors.textInverse : colors.textPrimary },
-                  index % 7 === 0 && !isSelected(day) && { color: colors.danger }
+                <View style={[
+                  styles.dayCellInner,
+                  isSelected(day) ? { backgroundColor: colors.primary } : null,
+                  isToday(day) && !isSelected(day) ? { borderColor: colors.primary, borderWidth: 2 } : null
                 ]}>
-                  {day}
-                </Text>
+                  <Text style={[
+                    styles.dayText,
+                    { color: isSelected(day) ? colors.textInverse : colors.textPrimary },
+                    index % 7 === 0 && !isSelected(day) && { color: colors.danger }
+                  ]}>
+                    {day}
+                  </Text>
+                </View>
                 
                 {/* Indicators */}
                 <View style={styles.indicators}>
                   {hasDeadline(day) && (
                     <View style={[styles.indicator, { backgroundColor: colors.danger }]} />
                   )}
-                  {hasSchedule(day) && (
-                    <View style={[styles.indicator, { backgroundColor: colors.info }]} />
-                  )}
+                  {(() => {
+                    const count = getScheduleCount(day);
+                    if (count === 0) return null;
+                    // Show up to 3 dots
+                    const dotsToShow = Math.min(count, 3);
+                    return Array.from({ length: dotsToShow }, (_, i) => (
+                      <View 
+                        key={i} 
+                        style={[
+                          styles.indicator, 
+                          { backgroundColor: colors.info }
+                        ]} 
+                      />
+                    ));
+                  })()}
                 </View>
               </>
             )}
@@ -239,7 +310,7 @@ export default function CalendarScreen() {
                   </Text>
                   {schedule.start_time && (
                     <Text style={[styles.eventTime, { color: colors.textMuted }]}>
-                      {schedule.start_time.split('T')[1]?.substring(0, 5) || ''}
+                      {formatWaktu(schedule.start_time)}
                     </Text>
                   )}
                 </View>
@@ -303,10 +374,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingBottom: 16,
+    paddingHorizontal: 4,
   },
   dayCell: {
     width: '14.28%',
-    aspectRatio: 1,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCellInner: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
@@ -317,20 +395,16 @@ const styles = StyleSheet.create({
   },
   indicators: {
     flexDirection: 'row',
-    gap: 4,
-    marginTop: 4,
+    gap: 3,
+    marginTop: 2,
     height: 6,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   indicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   eventsContainer: {
     flex: 1,

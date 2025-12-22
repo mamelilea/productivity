@@ -6,9 +6,11 @@ import {
 } from '@/src/components';
 import {
     AssignmentType,
+    CustomType,
     Priority,
     TaskType
 } from '@/src/models';
+import * as customTypeService from '@/src/services/customTypeService';
 import * as taskService from '@/src/services/taskService';
 import { useAppStore } from '@/src/store/appStore';
 import {
@@ -50,6 +52,8 @@ export default function EditTaskScreen() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState<TaskType>('NON_KULIAH');
   const [customType, setCustomType] = useState('');
+  const [savedCustomTypes, setSavedCustomTypes] = useState<CustomType[]>([]);
+  const [showNewCustomTypeInput, setShowNewCustomTypeInput] = useState(false);
   const [priority, setPriority] = useState<Priority>('MEDIUM');
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [isToday, setIsToday] = useState(false);
@@ -64,14 +68,27 @@ export default function EditTaskScreen() {
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newLinkLabel, setNewLinkLabel] = useState('');
   
+  // Reminder state
+  const [enableReminder, setEnableReminder] = useState(false);
+  const [reminderOffset, setReminderOffset] = useState(1440); // 1 day default
+  
   useEffect(() => {
     loadTask();
   }, [id]);
+  
+  const loadSavedCustomTypes = async () => {
+    const customTypes = await customTypeService.getCustomTypes('TASK');
+    setSavedCustomTypes(customTypes);
+  };
   
   const loadTask = async () => {
     if (!id) return;
     setIsLoading(true);
     try {
+      // Load saved custom types first
+      const customTypes = await customTypeService.getCustomTypes('TASK');
+      setSavedCustomTypes(customTypes);
+      
       const task = await taskService.getTaskById(parseInt(id));
       if (task) {
         setTitle(task.title);
@@ -81,6 +98,12 @@ export default function EditTaskScreen() {
         setPriority(task.priority);
         setDeadlineDate(task.deadline ? new Date(task.deadline) : null);
         setIsToday(task.is_today);
+        
+        // Check if custom type exists in saved types
+        if (task.type === 'CUSTOM' && task.custom_type) {
+          const existsInSaved = customTypes.some(ct => ct.name === task.custom_type);
+          setShowNewCustomTypeInput(!existsInSaved);
+        }
         
         if (task.course_detail) {
           setCourseName(task.course_detail.course_name);
@@ -123,6 +146,14 @@ export default function EditTaskScreen() {
         is_today: isToday,
       });
       
+      // Save new custom type for future reuse
+      if (type === 'CUSTOM' && customType.trim() && showNewCustomTypeInput) {
+        await customTypeService.addCustomType({
+          name: customType.trim(),
+          entity_type: 'TASK',
+        });
+      }
+      
       // Update course detail if kuliah
       if (type === 'KULIAH') {
         await taskService.updateCourseDetail(parseInt(id!), {
@@ -141,6 +172,16 @@ export default function EditTaskScreen() {
             label: link.label || undefined,
           });
         }
+      }
+      
+      // Schedule reminder if enabled and has deadline
+      if (enableReminder && deadlineDate) {
+        await notificationService.createTaskDeadlineReminder(
+          parseInt(id!),
+          title.trim(),
+          deadlineDate.toISOString(),
+          reminderOffset
+        );
       }
       
       await refreshTaskData();
@@ -236,12 +277,80 @@ export default function EditTaskScreen() {
             Tipe Tugas
           </Text>
           <View style={styles.optionRow}>
-            {TASK_TYPE_OPTIONS.map(opt => 
-              renderOptionButton(opt.label, opt.value, type, () => setType(opt.value as TaskType))
+            {/* Standard type options (KULIAH and NON_KULIAH only) */}
+            {TASK_TYPE_OPTIONS.filter(opt => opt.value !== 'CUSTOM').map(opt => 
+              renderOptionButton(
+                opt.label, 
+                opt.value, 
+                type === 'CUSTOM' ? '' : type, 
+                () => {
+                  setType(opt.value as TaskType);
+                  setCustomType('');
+                  setShowNewCustomTypeInput(false);
+                }
+              )
             )}
+            
+            {/* Saved custom types as primary chips */}
+            {savedCustomTypes.map(ct => {
+              const isActive = type === 'CUSTOM' && customType === ct.name && !showNewCustomTypeInput;
+              return (
+                <TouchableOpacity
+                  key={ct.id}
+                  style={[
+                    styles.optionButton,
+                    { 
+                      backgroundColor: isActive ? colors.secondary : colors.surfaceVariant,
+                      borderColor: isActive ? colors.secondary : colors.border,
+                    }
+                  ]}
+                  onPress={() => {
+                    setType('CUSTOM');
+                    setCustomType(ct.name);
+                    setShowNewCustomTypeInput(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: isActive ? colors.textInverse : colors.textSecondary }
+                  ]}>
+                    {ct.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            
+            {/* "Tipe Lainnya" button for adding new custom type */}
+            <TouchableOpacity
+              style={[
+                styles.optionButton,
+                { 
+                  backgroundColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.surfaceVariant,
+                  borderColor: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.primary : colors.border,
+                }
+              ]}
+              onPress={() => {
+                setType('CUSTOM');
+                setCustomType('');
+                setShowNewCustomTypeInput(true);
+              }}
+            >
+              <Ionicons 
+                name="add" 
+                size={14} 
+                color={(type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary} 
+              />
+              <Text style={[
+                styles.optionButtonText,
+                { color: (type === 'CUSTOM' && showNewCustomTypeInput) ? colors.textInverse : colors.textSecondary }
+              ]}>
+                Tipe Lainnya
+              </Text>
+            </TouchableOpacity>
           </View>
           
-          {type === 'CUSTOM' && (
+          {/* Text input for new custom type (show only when adding new) */}
+          {type === 'CUSTOM' && showNewCustomTypeInput && (
             <TextInput
               style={[styles.input, { 
                 backgroundColor: colors.surface, 
@@ -249,7 +358,7 @@ export default function EditTaskScreen() {
                 borderColor: colors.border,
                 marginTop: 12,
               }]}
-              placeholder="Ketik tipe tugas..."
+              placeholder="Ketik tipe tugas baru..."
               placeholderTextColor={colors.textMuted}
               value={customType}
               onChangeText={setCustomType}
@@ -333,6 +442,35 @@ export default function EditTaskScreen() {
           mode="datetime"
           placeholder="Pilih tanggal dan waktu deadline"
         />
+        
+        {/* Reminder */}
+        {deadlineDate && (
+          <View style={styles.formGroup}>
+            <View style={styles.switchRow}>
+              <Text style={[styles.label, { color: colors.textPrimary }]}>
+                Aktifkan Pengingat
+              </Text>
+              <Switch
+                value={enableReminder}
+                onValueChange={setEnableReminder}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+            
+            {enableReminder && (
+              <View style={styles.optionRow}>
+                {REMINDER_PRESETS.slice(0, 6).map(preset => 
+                  renderOptionButton(
+                    preset.label, 
+                    preset.value.toString(), 
+                    reminderOffset.toString(), 
+                    () => setReminderOffset(preset.value)
+                  )
+                )}
+              </View>
+            )}
+          </View>
+        )}
         
         {/* Is Today */}
         <View style={styles.formGroup}>
@@ -477,6 +615,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
