@@ -3,17 +3,17 @@ import { Schedule } from '@/src/models';
 import { getSchedulesForDate } from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
-import { formatTanggal, NAMA_HARI } from '@/src/utils/dateUtils';
+import { formatTanggal, getLocalDateString, NAMA_HARI } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  PanResponder,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 const HOUR_HEIGHT = 60; // Height per hour in pixels
@@ -31,7 +31,7 @@ export default function CalendarDayDetailScreen() {
   // Parse date
   const dateObj = new Date(date + 'T00:00:00');
   const dayOfWeek = dateObj.getDay();
-  const isToday = new Date().toISOString().split('T')[0] === date;
+  const isToday = getLocalDateString(new Date()) === date;
   const currentHour = new Date().getHours();
   const currentMinute = new Date().getMinutes();
   

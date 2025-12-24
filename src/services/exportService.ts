@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { getDatabase } from '../db/database';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // Get document directory (fallback untuk web)
 const getDocumentDirectory = (): string => {
@@ -163,7 +164,7 @@ export const shareExportedFile = async (filePath: string): Promise<void> => {
 
 // Helper functions
 const formatDateForFile = (date: Date): string => {
-    return date.toISOString().split('T')[0].replace(/-/g, '');
+    return getLocalDateString(date).replace(/-/g, '');
 };
 
 const escapeCsvField = (field: string): string => {

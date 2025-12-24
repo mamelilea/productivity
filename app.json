@@ -44,6 +44,12 @@
         "projectId": "1fca5196-71b4-4fc8-b363-ad961f4cb60f"
       }
     },
-    "owner": "achmalp"
+    "owner": "achmalp",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1fca5196-71b4-4fc8-b363-ad961f4cb60f"
+    }
   }
 }

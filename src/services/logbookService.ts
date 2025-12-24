@@ -10,6 +10,7 @@ import {
     UpdateLogbookCategoryInput,
     UpdateLogbookInput
 } from '../models';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // ==================== CATEGORY FUNCTIONS ====================
 
@@ -268,8 +269,8 @@ export const formatDateForDisplay = (dateStr: string): string => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const dateOnly = dateStr.split('T')[0];
-    const todayStr = today.toISOString().split('T')[0];
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const todayStr = getLocalDateString(today);
+    const yesterdayStr = getLocalDateString(yesterday);
 
     if (dateOnly === todayStr) return 'Hari Ini';
     if (dateOnly === yesterdayStr) return 'Kemarin';

@@ -4,6 +4,7 @@ import { SimpleMarkdownInput, SimpleMarkdownRenderer } from '@/src/components';
 import { LogbookCategory, LogbookEntry, LogbookTag, TAG_COLORS, TAG_LABELS } from '@/src/models';
 import * as logbookService from '@/src/services/logbookService';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
+import { getLocalDateString } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -87,7 +88,7 @@ export default function LogbookCategoryScreen() {
 
         setIsSaving(true);
         try {
-            const dateStr = selectedDate.toISOString().split('T')[0];
+            const dateStr = getLocalDateString(selectedDate);
             
             if (editingEntryId) {
                 await logbookService.updateLogbookEntry(editingEntryId, {

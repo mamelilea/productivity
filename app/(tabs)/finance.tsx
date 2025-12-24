@@ -12,6 +12,7 @@ import {
     initDefaultFinanceCategories
 } from '@/src/services/financeService';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
+import { getLocalDateString } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
@@ -222,8 +223,8 @@ export default function FinanceScreen() {
         yesterday.setDate(yesterday.getDate() - 1);
         
         const dateOnly = dateStr;
-        const todayStr = today.toISOString().split('T')[0];
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const todayStr = getLocalDateString(today);
+        const yesterdayStr = getLocalDateString(yesterday);
         
         if (dateOnly === todayStr) return 'Hari Ini';
         if (dateOnly === yesterdayStr) return 'Kemarin';

@@ -6,6 +6,7 @@ import {
     getCategoriesByType
 } from '@/src/services/financeService';
 import { COLORS, DARK_COLORS } from '@/src/utils/constants';
+import { getLocalDateString } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -84,7 +85,7 @@ export default function NewTransactionScreen() {
                 amount: parseInt(amount, 10),
                 category_id: categoryId || undefined,
                 description: description.trim(),
-                date: date.toISOString().split('T')[0]
+                date: getLocalDateString(date)
             });
 
             router.back();
