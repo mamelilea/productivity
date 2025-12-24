@@ -20,7 +20,7 @@ import {
 
 export default function NoteDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, unlocked } = useLocalSearchParams<{ id: string; unlocked?: string }>();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   
@@ -38,9 +38,9 @@ export default function NoteDetailScreen() {
     try {
       const noteData = await noteService.getNoteById(parseInt(id));
       setNote(noteData);
-      // If note is private, keep it locked initially
+      // If note is private, check if already unlocked via URL param (from biometric auth)
       if (noteData?.is_private) {
-        setIsLocked(true);
+        setIsLocked(unlocked !== 'true');
       } else {
         setIsLocked(false);
       }

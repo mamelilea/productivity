@@ -1,6 +1,6 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
-import { SimpleMarkdownInput } from '@/src/components';
+import { CustomReminderInput, SimpleMarkdownInput } from '@/src/components';
 import { AssignmentType, CustomType, Priority, TaskType } from '@/src/models';
 import * as customTypeService from '@/src/services/customTypeService';
 import * as notificationService from '@/src/services/notificationService';
@@ -70,6 +70,7 @@ export default function NewTaskScreen() {
   // Reminder state
   const [enableReminder, setEnableReminder] = useState(false);
   const [reminderOffset, setReminderOffset] = useState(1440); // 1 day default
+  const [useCustomReminder, setUseCustomReminder] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -160,6 +161,12 @@ export default function NewTaskScreen() {
           title.trim(),
           deadlineDate.toISOString(),
           reminderOffset
+        );
+        // Also schedule notification at exact deadline time
+        await notificationService.createTaskDeadlineNotification(
+          taskId,
+          title.trim(),
+          deadlineDate.toISOString()
         );
       }
       
@@ -446,16 +453,46 @@ export default function NewTaskScreen() {
             </View>
             
             {enableReminder && (
-              <View style={styles.optionRow}>
-                {REMINDER_PRESETS.slice(0, 6).map(preset => 
-                  renderOptionButton(
-                    preset.label, 
-                    preset.value.toString(), 
-                    reminderOffset.toString(), 
-                    () => setReminderOffset(preset.value)
-                  )
+              <>
+                <View style={styles.optionRow}>
+                  {REMINDER_PRESETS.slice(0, 4).map(preset => 
+                    renderOptionButton(
+                      preset.label, 
+                      preset.value.toString(), 
+                      useCustomReminder ? '' : reminderOffset.toString(), 
+                      () => {
+                        setReminderOffset(preset.value);
+                        setUseCustomReminder(false);
+                      }
+                    )
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionButton,
+                      { 
+                        backgroundColor: useCustomReminder ? colors.primary : colors.surfaceVariant,
+                        borderColor: useCustomReminder ? colors.primary : colors.border,
+                      }
+                    ]}
+                    onPress={() => setUseCustomReminder(true)}
+                  >
+                    <Text style={[
+                      styles.optionButtonText,
+                      { color: useCustomReminder ? colors.textInverse : colors.textSecondary }
+                    ]}>
+                      Kustom
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {useCustomReminder && (
+                  <CustomReminderInput
+                    value={reminderOffset}
+                    onChange={setReminderOffset}
+                    enabled={useCustomReminder}
+                  />
                 )}
-              </View>
+              </>
             )}
           </View>
         )}

@@ -69,14 +69,28 @@ export default function FinanceScreen() {
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
 
-    // Check if any modal is open and hide tab bar
+    // Check if any modal is open
     const isAnyModalOpen = showDateModal || showTypeModal || showCategoryModal;
     
+    // Hide tab bar when modal is open to prevent it showing behind modal
     useEffect(() => {
-        navigation.setOptions({
-            tabBarStyle: isAnyModalOpen ? { display: 'none' } : undefined,
-        });
-    }, [isAnyModalOpen, navigation]);
+        if (isAnyModalOpen) {
+            navigation.setOptions({
+                tabBarStyle: { display: 'none' },
+            });
+        } else {
+            // Explicitly set the same style as global to prevent height differences
+            navigation.setOptions({
+                tabBarStyle: {
+                    backgroundColor: colors.surface,
+                    borderTopColor: colors.border,
+                    paddingBottom: 12,
+                    paddingTop: 8,
+                    height: 70,
+                },
+            });
+        }
+    }, [isAnyModalOpen, navigation, colors]);
 
     const checkAuth = async () => {
         const preferredMethod = await authService.getPreferredAuthMethod();
@@ -103,14 +117,8 @@ export default function FinanceScreen() {
         
         if (result.success) {
             setIsAuthenticated(true);
-        } else if (result.error !== 'Dibatalkan') {
-            // Try password fallback
-            const hasPass = await authService.hasFinancePassword();
-            if (hasPass) {
-                setShowPasswordPrompt(true);
-            } else {
-                Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
-            }
+        } else if (result.error && result.error !== 'Dibatalkan') {
+            Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
         }
     };
 
@@ -900,7 +908,11 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     modalOverlay: {
-        flex: 1,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
         zIndex: 9999,
@@ -910,7 +922,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         padding: 20,
-        paddingBottom: 24,
+        paddingBottom: 90,
         maxHeight: '70%',
         zIndex: 10000,
         elevation: 10000,

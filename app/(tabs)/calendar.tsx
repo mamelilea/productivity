@@ -331,7 +331,11 @@ export default function CalendarScreen() {
       {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.info }]}
-        onPress={() => router.push('/schedule/new')}
+        onPress={() => {
+          const today = new Date();
+          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+          router.push(`/schedule/new?date=${todayStr}`);
+        }}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />

@@ -1,6 +1,7 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
+    CustomReminderInput,
     LoadingSpinner,
     SimpleMarkdownInput
 } from '@/src/components';
@@ -73,6 +74,7 @@ export default function EditTaskScreen() {
   // Reminder state
   const [enableReminder, setEnableReminder] = useState(false);
   const [reminderOffset, setReminderOffset] = useState(1440); // 1 day default
+  const [useCustomReminder, setUseCustomReminder] = useState(false);
   
   useEffect(() => {
     loadTask();
@@ -115,6 +117,20 @@ export default function EditTaskScreen() {
         
         if (task.links) {
           setLinks(task.links.map(l => ({ id: l.id, url: l.url, label: l.label || '' })));
+        }
+        
+        // Load existing notifications for this task
+        const notifications = await notificationService.getNotificationsForTarget('TASK', parseInt(id));
+        if (notifications.length > 0) {
+          setEnableReminder(true);
+          // Find the reminder notification (offset_minutes > 0)
+          const reminderNotif = notifications.find(n => n.offset_minutes > 0);
+          if (reminderNotif) {
+            setReminderOffset(reminderNotif.offset_minutes);
+            // Check if it's a custom value (not in presets)
+            const isPreset = [5, 15, 30, 60].includes(reminderNotif.offset_minutes);
+            setUseCustomReminder(!isPreset);
+          }
         }
       }
     } catch (error) {
@@ -178,12 +194,24 @@ export default function EditTaskScreen() {
       
       // Schedule reminder if enabled and has deadline
       if (enableReminder && deadlineDate) {
+        // Cancel old notifications first
+        await notificationService.cancelNotificationsForTarget('TASK', parseInt(id!));
+        
         await notificationService.createTaskDeadlineReminder(
           parseInt(id!),
           title.trim(),
           deadlineDate.toISOString(),
           reminderOffset
         );
+        // Also schedule notification at exact deadline time
+        await notificationService.createTaskDeadlineNotification(
+          parseInt(id!),
+          title.trim(),
+          deadlineDate.toISOString()
+        );
+      } else if (!enableReminder) {
+        // Cancel all notifications if reminder disabled
+        await notificationService.cancelNotificationsForTarget('TASK', parseInt(id!));
       }
       
       await refreshTaskData();
@@ -460,16 +488,46 @@ export default function EditTaskScreen() {
             </View>
             
             {enableReminder && (
-              <View style={styles.optionRow}>
-                {REMINDER_PRESETS.slice(0, 6).map(preset => 
-                  renderOptionButton(
-                    preset.label, 
-                    preset.value.toString(), 
-                    reminderOffset.toString(), 
-                    () => setReminderOffset(preset.value)
-                  )
+              <>
+                <View style={styles.optionRow}>
+                  {REMINDER_PRESETS.slice(0, 4).map(preset => 
+                    renderOptionButton(
+                      preset.label, 
+                      preset.value.toString(), 
+                      useCustomReminder ? '' : reminderOffset.toString(), 
+                      () => {
+                        setReminderOffset(preset.value);
+                        setUseCustomReminder(false);
+                      }
+                    )
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionButton,
+                      { 
+                        backgroundColor: useCustomReminder ? colors.primary : colors.surfaceVariant,
+                        borderColor: useCustomReminder ? colors.primary : colors.border,
+                      }
+                    ]}
+                    onPress={() => setUseCustomReminder(true)}
+                  >
+                    <Text style={[
+                      styles.optionButtonText,
+                      { color: useCustomReminder ? colors.textInverse : colors.textSecondary }
+                    ]}>
+                      Kustom
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {useCustomReminder && (
+                  <CustomReminderInput
+                    value={reminderOffset}
+                    onChange={setReminderOffset}
+                    enabled={useCustomReminder}
+                  />
                 )}
-              </View>
+              </>
             )}
           </View>
         )}

@@ -180,6 +180,38 @@ export const createScheduleReminder = async (
     });
 };
 
+// Create notification at exact task deadline time
+export const createTaskDeadlineNotification = async (
+    taskId: number,
+    taskTitle: string,
+    deadline: string
+): Promise<string | null> => {
+    return scheduleNotification({
+        target_type: 'TASK',
+        target_id: taskId,
+        trigger_at: deadline,
+        offset_minutes: 0,
+        title: '🚨 Deadline Tugas!',
+        body: `"${taskTitle}" sudah jatuh tempo sekarang!`,
+    });
+};
+
+// Create notification at exact schedule start time
+export const createScheduleStartNotification = async (
+    scheduleId: number,
+    scheduleTitle: string,
+    startTime: string
+): Promise<string | null> => {
+    return scheduleNotification({
+        target_type: 'SCHEDULE',
+        target_id: scheduleId,
+        trigger_at: startTime,
+        offset_minutes: 0,
+        title: '📅 Jadwal Dimulai!',
+        body: `"${scheduleTitle}" dimulai sekarang!`,
+    });
+};
+
 // Helper: Format offset to human readable text
 const formatOffsetToText = (minutes: number): string => {
     if (minutes < 60) {

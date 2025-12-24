@@ -68,16 +68,9 @@ export default function NotesScreen() {
     if (preferredMethod === 'biometric') {
       const result = await authService.authenticateWithBiometric();
       if (result.success) {
-        router.push(`/note/${note.id}`);
-      } else if (result.error !== 'Dibatalkan') {
-        // Try password fallback
-        const hasPass = await authService.hasFinancePassword();
-        if (hasPass) {
-          setPendingNoteId(note.id);
-          setShowPasswordPrompt(true);
-        } else {
-          Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
-        }
+        router.push(`/note/${note.id}?unlocked=true`);
+      } else if (result.error && result.error !== 'Dibatalkan') {
+        Alert.alert('Autentikasi Gagal', result.error || 'Coba lagi');
       }
     } else {
       // Password auth
@@ -90,7 +83,7 @@ export default function NotesScreen() {
     const valid = await authService.verifyFinancePassword(password);
     if (valid && pendingNoteId) {
       setShowPasswordPrompt(false);
-      router.push(`/note/${pendingNoteId}`);
+      router.push(`/note/${pendingNoteId}?unlocked=true`);
       setPendingNoteId(null);
     } else {
       Alert.alert('Password Salah', 'Password yang Anda masukkan tidak valid.');

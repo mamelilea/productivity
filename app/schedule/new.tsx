@@ -17,7 +17,7 @@ import {
 } from '@/src/utils/constants';
 import { NAMA_HARI } from '@/src/utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -34,6 +34,7 @@ import {
 
 export default function NewScheduleScreen() {
   const router = useRouter();
+  const { date } = useLocalSearchParams<{ date?: string }>();
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? DARK_COLORS : COLORS;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -80,7 +81,22 @@ export default function NewScheduleScreen() {
   const [savedCustomTypes, setSavedCustomTypes] = useState<CustomType[]>([]);
   const [showNewCustomTypeInput, setShowNewCustomTypeInput] = useState(false);
   const [description, setDescription] = useState('');
-  const [startTimeDate, setStartTimeDate] = useState<Date | null>(null);
+  // Initialize startTimeDate based on passed date parameter or today
+  const getDefaultStartTime = (): Date | null => {
+    if (date) {
+      // From calendar detail - set to the selected date at current time
+      const defaultDate = new Date(date + 'T00:00:00');
+      const now = new Date();
+      // Round to next hour
+      defaultDate.setHours(now.getHours() + 1, 0, 0, 0);
+      return defaultDate;
+    }
+    // From home or no date - default to today at next hour
+    const today = new Date();
+    today.setHours(today.getHours() + 1, 0, 0, 0);
+    return today;
+  };
+  const [startTimeDate, setStartTimeDate] = useState<Date | null>(getDefaultStartTime());
   const [endTimeDate, setEndTimeDate] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [selectedColor, setSelectedColor] = useState(CATEGORY_COLORS[0]);
@@ -167,6 +183,12 @@ export default function NewScheduleScreen() {
           title.trim(),
           startTimeDate.toISOString(),
           reminderOffset
+        );
+        // Also schedule notification at exact start time
+        await notificationService.createScheduleStartNotification(
+          scheduleId,
+          title.trim(),
+          startTimeDate.toISOString()
         );
       }
       

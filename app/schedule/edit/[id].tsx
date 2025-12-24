@@ -1,12 +1,14 @@
 import DateTimeInput from '@/components/DateTimeInput';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
+    CustomReminderInput,
     LoadingSpinner,
     RecurrencePickerModal
 } from '@/src/components';
 import { RecurrenceSettings } from '@/src/components/RecurrencePickerModal';
 import { CustomType, RecurrenceType, ScheduleType } from '@/src/models';
 import * as customTypeService from '@/src/services/customTypeService';
+import * as notificationService from '@/src/services/notificationService';
 import * as scheduleService from '@/src/services/scheduleService';
 import { useAppStore } from '@/src/store/appStore';
 import {
@@ -14,6 +16,7 @@ import {
     COLORS,
     DARK_COLORS,
     RECURRENCE_TYPE_OPTIONS,
+    REMINDER_PRESETS,
     SCHEDULE_TYPE_OPTIONS
 } from '@/src/utils/constants';
 import { NAMA_HARI } from '@/src/utils/dateUtils';
@@ -26,6 +29,7 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -69,6 +73,11 @@ export default function EditScheduleScreen() {
   const [recurrenceEndCount, setRecurrenceEndCount] = useState<number | null>(null);
   const [showRecurrenceModal, setShowRecurrenceModal] = useState(false);
   
+  // Reminder state
+  const [enableReminder, setEnableReminder] = useState(false);
+  const [reminderOffset, setReminderOffset] = useState(30); // 30 minutes default
+  const [useCustomReminder, setUseCustomReminder] = useState(false);
+  
   useEffect(() => {
     loadSchedule();
     loadCustomTypes();
@@ -109,6 +118,20 @@ export default function EditScheduleScreen() {
         
         const scheduleLinks = await scheduleService.getScheduleLinks(parseInt(id));
         setLinks(scheduleLinks.map(l => ({ id: l.id, url: l.url, label: l.label || '' })));
+        
+        // Load existing notifications for this schedule
+        const notifications = await notificationService.getNotificationsForTarget('SCHEDULE', parseInt(id));
+        if (notifications.length > 0) {
+          setEnableReminder(true);
+          // Find the reminder notification (offset_minutes > 0)
+          const reminderNotif = notifications.find(n => n.offset_minutes > 0);
+          if (reminderNotif) {
+            setReminderOffset(reminderNotif.offset_minutes);
+            // Check if it's a custom value (not in presets)
+            const isPreset = [5, 15, 30, 60].includes(reminderNotif.offset_minutes);
+            setUseCustomReminder(!isPreset);
+          }
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Gagal memuat jadwal');
@@ -171,6 +194,28 @@ export default function EditScheduleScreen() {
             label: link.label || undefined,
           });
         }
+      }
+      
+      // Schedule reminder if enabled
+      if (enableReminder && startTimeDate) {
+        // Cancel old notifications first
+        await notificationService.cancelNotificationsForTarget('SCHEDULE', parseInt(id!));
+        
+        await notificationService.createScheduleReminder(
+          parseInt(id!),
+          title.trim(),
+          startTimeDate.toISOString(),
+          reminderOffset
+        );
+        // Also schedule notification at exact start time
+        await notificationService.createScheduleStartNotification(
+          parseInt(id!),
+          title.trim(),
+          startTimeDate.toISOString()
+        );
+      } else if (!enableReminder) {
+        // Cancel all notifications if reminder disabled
+        await notificationService.cancelNotificationsForTarget('SCHEDULE', parseInt(id!));
       }
       
       await fetchSchedules();
@@ -560,6 +605,63 @@ export default function EditScheduleScreen() {
           </View>
         </View>
         
+        {/* Reminder */}
+        <View style={styles.formGroup}>
+          <View style={styles.switchRow}>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>
+              Aktifkan Pengingat
+            </Text>
+            <Switch
+              value={enableReminder}
+              onValueChange={setEnableReminder}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+          
+          {enableReminder && (
+            <>
+              <View style={[styles.optionRow, { marginTop: 12 }]}>
+                {REMINDER_PRESETS.slice(0, 4).map(preset => 
+                  renderOptionButton(
+                    preset.label, 
+                    preset.value.toString(), 
+                    useCustomReminder ? '' : reminderOffset.toString(), 
+                    () => {
+                      setReminderOffset(preset.value);
+                      setUseCustomReminder(false);
+                    }
+                  )
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.optionButton,
+                    { 
+                      backgroundColor: useCustomReminder ? colors.primary : colors.surfaceVariant,
+                      borderColor: useCustomReminder ? colors.primary : colors.border,
+                    }
+                  ]}
+                  onPress={() => setUseCustomReminder(true)}
+                >
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: useCustomReminder ? colors.textInverse : colors.textSecondary }
+                  ]}>
+                    Kustom
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {useCustomReminder && (
+                <CustomReminderInput
+                  value={reminderOffset}
+                  onChange={setReminderOffset}
+                  enabled={useCustomReminder}
+                />
+              )}
+            </>
+          )}
+        </View>
+        
         {/* Submit Button */}
         <TouchableOpacity
           style={[
@@ -623,6 +725,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   optionButton: {
     paddingHorizontal: 14,

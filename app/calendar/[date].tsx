@@ -442,7 +442,7 @@ export default function CalendarDayDetailScreen() {
       {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.info }]}
-        onPress={() => router.push('/schedule/new')}
+        onPress={() => router.push(`/schedule/new?date=${date}`)}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />

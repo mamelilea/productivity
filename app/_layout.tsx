@@ -120,6 +120,13 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
+          name="schedule/edit/[id]" 
+          options={{ 
+            title: 'Edit Jadwal',
+            presentation: 'card' 
+          }} 
+        />
+        <Stack.Screen 
           name="logbook/[date]" 
           options={{ 
             title: 'Logbook',
