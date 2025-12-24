@@ -107,6 +107,14 @@ export default function CalendarScreen() {
     const targetDateOnly = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
 
+    // Format target date as YYYY-MM-DD for exception check
+    const targetDateStr = `${targetDateOnly.getFullYear()}-${String(targetDateOnly.getMonth() + 1).padStart(2, '0')}-${String(targetDateOnly.getDate()).padStart(2, '0')}`;
+
+    // Check if this date is excluded (deleted from recurring series)
+    if (schedule.exception_dates && schedule.exception_dates.includes(targetDateStr)) {
+      return false;
+    }
+
     // Check end conditions
     if (schedule.recurrence_end_type === 'date' && schedule.recurrence_end_date) {
       const endDate = new Date(schedule.recurrence_end_date);
